@@ -1,6 +1,7 @@
 
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
+import { Link, useLocation } from "react-router-dom";
 import {
   LayoutDashboard,
   LineChart,
@@ -19,12 +20,12 @@ import { cn } from "@/lib/utils";
 interface SidebarItemProps {
   icon: React.ComponentType<{ className?: string }>;
   label: string;
+  to: string;
   active?: boolean;
-  onClick?: () => void;
   collapsed?: boolean;
 }
 
-function SidebarItem({ icon: Icon, label, active, onClick, collapsed }: SidebarItemProps) {
+function SidebarItem({ icon: Icon, label, to, active, collapsed }: SidebarItemProps) {
   return (
     <Button
       variant="ghost"
@@ -33,18 +34,20 @@ function SidebarItem({ icon: Icon, label, active, onClick, collapsed }: SidebarI
         active ? "bg-brand/10 font-medium text-brand" : "text-sidebar-foreground/70",
         collapsed ? "justify-center px-2" : ""
       )}
-      onClick={onClick}
+      asChild
     >
-      <Icon className={cn("h-5 w-5", active ? "text-brand" : "text-sidebar-foreground/70")} />
-      {!collapsed && <span>{label}</span>}
+      <Link to={to}>
+        <Icon className={cn("h-5 w-5", active ? "text-brand" : "text-sidebar-foreground/70")} />
+        {!collapsed && <span>{label}</span>}
+      </Link>
     </Button>
   );
 }
 
 export function Sidebar() {
   const [collapsed, setCollapsed] = useState(false);
-  const [activeItem, setActiveItem] = useState("dashboard");
-
+  const location = useLocation();
+  
   return (
     <aside
       className={cn(
@@ -68,50 +71,50 @@ export function Sidebar() {
         <SidebarItem
           icon={LayoutDashboard}
           label="Dashboard"
-          active={activeItem === "dashboard"}
-          onClick={() => setActiveItem("dashboard")}
+          to="/"
+          active={location.pathname === "/"}
           collapsed={collapsed}
         />
         <SidebarItem
           icon={LineChart}
           label="Campaign Analytics"
-          active={activeItem === "analytics"}
-          onClick={() => setActiveItem("analytics")}
+          to="/analytics"
+          active={location.pathname === "/analytics"}
           collapsed={collapsed}
         />
         <SidebarItem
           icon={Image}
           label="Creative Library"
-          active={activeItem === "creative"}
-          onClick={() => setActiveItem("creative")}
+          to="/creative-library"
+          active={location.pathname === "/creative-library"}
           collapsed={collapsed}
         />
         <SidebarItem
           icon={TargetIcon}
           label="Audience Insights"
-          active={activeItem === "audience"}
-          onClick={() => setActiveItem("audience")}
+          to="/audience"
+          active={location.pathname === "/audience"}
           collapsed={collapsed}
         />
         <SidebarItem
           icon={LightbulbIcon}
           label="AI Insights"
-          active={activeItem === "insights"}
-          onClick={() => setActiveItem("insights")}
+          to="/insights"
+          active={location.pathname === "/insights"}
           collapsed={collapsed}
         />
         <SidebarItem
           icon={MonitorIcon}
           label="Monitoring"
-          active={activeItem === "monitoring"}
-          onClick={() => setActiveItem("monitoring")}
+          to="/monitoring"
+          active={location.pathname === "/monitoring"}
           collapsed={collapsed}
         />
         <SidebarItem
           icon={Gauge}
           label="Performance Tools"
-          active={activeItem === "tools"}
-          onClick={() => setActiveItem("tools")}
+          to="/tools"
+          active={location.pathname === "/tools"}
           collapsed={collapsed}
         />
       </div>
@@ -120,15 +123,15 @@ export function Sidebar() {
         <SidebarItem
           icon={Users}
           label="Team Access"
-          active={activeItem === "team"}
-          onClick={() => setActiveItem("team")}
+          to="/team"
+          active={location.pathname === "/team"}
           collapsed={collapsed}
         />
         <SidebarItem
           icon={Settings}
           label="Settings"
-          active={activeItem === "settings"}
-          onClick={() => setActiveItem("settings")}
+          to="/settings"
+          active={location.pathname === "/settings"}
           collapsed={collapsed}
         />
       </div>

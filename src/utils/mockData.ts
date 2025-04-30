@@ -1,4 +1,3 @@
-
 // Mock data for Meta Ads Platform
 
 // Campaign performance data
@@ -48,6 +47,27 @@ export interface AIInsight {
   timestamp: string;
   confidence: number;
   actionable: boolean;
+}
+
+// Creative data
+export interface Creative {
+  id: string;
+  name: string;
+  type: "image" | "video";
+  url: string;
+  thumbnailUrl: string;
+  performance: number;
+  impressions: number;
+  clicks: number;
+  ctr: number;
+  conversions: number;
+  spend: number;
+  revenue: number;
+  roas: number;
+  startDate: string;
+  endDate: string;
+  themes: string[];
+  status: "active" | "paused" | "archived";
 }
 
 // Generate random performance metrics
@@ -194,6 +214,84 @@ export function generateCreativeThemes(): CreativeTheme[] {
   ];
   
   return themes;
+}
+
+// Generate creative data
+export function generateCreatives(count: number = 20): Creative[] {
+  const creatives: Creative[] = [];
+  const themes = generateCreativeThemes().map(theme => theme.name);
+  const statuses: ("active" | "paused" | "archived")[] = ["active", "paused", "archived"];
+  const types: ("image" | "video")[] = ["image", "video"];
+  
+  const imageUrls = [
+    "https://images.unsplash.com/photo-1581091226825-a6a2a5aee158",
+    "https://images.unsplash.com/photo-1488590528505-98d2b5aba04b",
+    "https://images.unsplash.com/photo-1649972904349-6e44c42644a7",
+    "https://images.unsplash.com/photo-1518770660439-4636190af475",
+    "https://images.unsplash.com/photo-1461749280684-dccba630e2f6"
+  ];
+  
+  const videoUrls = [
+    "https://images.unsplash.com/photo-1526374965328-7f61d4dc18c5",
+    "https://images.unsplash.com/photo-1487058792275-0ad4aaf24ca7",
+    "https://images.unsplash.com/photo-1605810230434-7631ac76ec81"
+  ];
+  
+  for (let i = 0; i < count; i++) {
+    const type = types[Math.floor(Math.random() * types.length)];
+    const status = statuses[Math.floor(Math.random() * statuses.length)];
+    
+    // Select 1-3 random themes for each creative
+    const creativeThemes: string[] = [];
+    const themeCount = Math.floor(Math.random() * 3) + 1;
+    
+    for (let j = 0; j < themeCount; j++) {
+      const randomTheme = themes[Math.floor(Math.random() * themes.length)];
+      if (!creativeThemes.includes(randomTheme)) {
+        creativeThemes.push(randomTheme);
+      }
+    }
+    
+    // Calculate dates
+    const startDate = new Date();
+    startDate.setDate(startDate.getDate() - Math.floor(Math.random() * 60));
+    
+    const endDate = new Date(startDate);
+    endDate.setDate(startDate.getDate() + Math.floor(Math.random() * 30) + 10);
+    
+    // Performance metrics
+    const spend = randomPerformance(100, 2000);
+    const impressions = Math.floor(spend * randomPerformance(200, 800));
+    const clicks = Math.floor(impressions * randomPerformance(0.01, 0.08));
+    const conversions = Math.floor(clicks * randomPerformance(0.05, 0.3));
+    const revenue = spend * randomPerformance(0.5, 3.0);
+    
+    creatives.push({
+      id: `creative-${i + 1}`,
+      name: `${creativeThemes[0]} ${type === "image" ? "Image" : "Video"} ${i + 1}`,
+      type,
+      url: type === "image" 
+        ? imageUrls[Math.floor(Math.random() * imageUrls.length)]
+        : videoUrls[Math.floor(Math.random() * videoUrls.length)],
+      thumbnailUrl: type === "image" 
+        ? imageUrls[Math.floor(Math.random() * imageUrls.length)]
+        : videoUrls[Math.floor(Math.random() * videoUrls.length)],
+      performance: randomPerformance(0.5, 2.5),
+      impressions,
+      clicks,
+      ctr: clicks / impressions,
+      conversions,
+      spend,
+      revenue,
+      roas: revenue / spend,
+      startDate: startDate.toISOString().split('T')[0],
+      endDate: endDate.toISOString().split('T')[0],
+      themes: creativeThemes,
+      status
+    });
+  }
+  
+  return creatives;
 }
 
 // Generate AI insights
