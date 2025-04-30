@@ -11,6 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Card, CardContent } from "@/components/ui/card";
 import { 
   Image, 
   Video, 
@@ -25,12 +26,17 @@ import {
   Archive,
   Share2,
   Download,
-  Trash 
+  Trash,
+  TrendingUp,
+  TrendingDown,
+  Gauge
 } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { Creative } from "@/pages/CreativeLibrary";
 import { CreativeTheme } from "@/utils/mockData";
+import { PerformanceBenchmarkChart, BenchmarkMetric } from "./PerformanceBenchmarkChart";
+import { BenchmarkComparison } from "./BenchmarkComparison";
 
 interface CreativeDetailProps {
   creative: Creative;
@@ -69,6 +75,77 @@ export function CreativeDetail({ creative, isOpen, onClose, themes }: CreativeDe
     const theme = themes.find(t => t.name === themeName);
     return theme?.color || "#F1F0FB"; // Default to soft gray
   };
+
+  // Benchmark metrics for performance comparison
+  const performanceMetrics: BenchmarkMetric[] = [
+    {
+      name: "CTR",
+      value: creative.ctr,
+      benchmark: 0.02, // 2% industry average CTR
+      unit: "%",
+      isHigherBetter: true
+    },
+    {
+      name: "CPC",
+      value: creative.spend / creative.clicks,
+      benchmark: 1.2, // $1.20 industry average CPC
+      unit: "$",
+      isHigherBetter: false
+    },
+    {
+      name: "ROAS",
+      value: creative.roas,
+      benchmark: 2.5, // 2.5x industry average ROAS
+      unit: "x",
+      isHigherBetter: true
+    },
+    {
+      name: "CPM",
+      value: (creative.spend / creative.impressions) * 1000,
+      benchmark: 7.0, // $7.00 industry average CPM
+      unit: "$",
+      isHigherBetter: false
+    },
+    {
+      name: "Conv Rate",
+      value: creative.conversions / creative.clicks,
+      benchmark: 0.03, // 3% industry average conversion rate
+      unit: "%",
+      isHigherBetter: true
+    }
+  ];
+
+  // Platform benchmark comparison
+  const platformBenchmarks: BenchmarkMetric[] = [
+    {
+      name: "Instagram Feed",
+      value: creative.ctr * 1.1, // 10% better than overall
+      benchmark: 0.018,
+      unit: "%",
+      isHigherBetter: true
+    },
+    {
+      name: "Facebook Feed",
+      value: creative.ctr * 0.9, // 10% worse than overall
+      benchmark: 0.015,
+      unit: "%",
+      isHigherBetter: true
+    },
+    {
+      name: "Instagram Stories",
+      value: creative.ctr * 1.3, // 30% better
+      benchmark: 0.022,
+      unit: "%",
+      isHigherBetter: true
+    },
+    {
+      name: "Facebook Right Column",
+      value: creative.ctr * 0.7, // 30% worse
+      benchmark: 0.012,
+      unit: "%",
+      isHigherBetter: true
+    }
+  ];
   
   return (
     <Sheet open={isOpen} onOpenChange={(open) => !open && onClose()}>
@@ -167,9 +244,10 @@ export function CreativeDetail({ creative, isOpen, onClose, themes }: CreativeDe
           
           {/* Performance Tabs */}
           <Tabs defaultValue="metrics">
-            <TabsList className="grid w-full grid-cols-3">
+            <TabsList className="grid w-full grid-cols-4">
               <TabsTrigger value="metrics">Key Metrics</TabsTrigger>
               <TabsTrigger value="benchmarks">Benchmarks</TabsTrigger>
+              <TabsTrigger value="platforms">Platform Comparison</TabsTrigger>
               <TabsTrigger value="audiences">Audiences</TabsTrigger>
             </TabsList>
             
@@ -234,61 +312,104 @@ export function CreativeDetail({ creative, isOpen, onClose, themes }: CreativeDe
             </TabsContent>
             
             <TabsContent value="benchmarks" className="space-y-4 pt-4">
-              <div className="space-y-3">
-                <div className="flex justify-between items-center">
-                  <span className="text-sm">Performance vs Account Average</span>
-                  <span className={cn(
-                    "text-sm font-medium",
-                    creative.performance >= 1 ? "text-green-600" : "text-red-600"
-                  )}>
-                    {creative.performance.toFixed(2)}x
-                  </span>
-                </div>
-                <div className="flex justify-between items-center">
-                  <span className="text-sm">CTR vs Account Average</span>
-                  <span className={cn(
-                    "text-sm font-medium",
-                    creative.ctr >= 0.02 ? "text-green-600" : "text-red-600"
-                  )}>
-                    {(creative.ctr / 0.02).toFixed(2)}x
-                  </span>
-                </div>
-                <div className="flex justify-between items-center">
-                  <span className="text-sm">ROAS vs Account Average</span>
-                  <span className={cn(
-                    "text-sm font-medium",
-                    creative.roas >= 1.5 ? "text-green-600" : "text-red-600"
-                  )}>
-                    {(creative.roas / 1.5).toFixed(2)}x
-                  </span>
-                </div>
-              </div>
+              <Card>
+                <CardContent className="pt-6">
+                  <div className="flex justify-between items-center mb-2">
+                    <div className="flex items-center">
+                      <Gauge className="h-5 w-5 mr-2 text-primary" />
+                      <h3 className="text-lg font-semibold">Performance Grade</h3>
+                    </div>
+                    <div className={cn(
+                      "px-3 py-1 rounded-full text-white font-semibold",
+                      creative.performance >= 1.5 ? "bg-green-600" :
+                      creative.performance >= 1 ? "bg-green-500" :
+                      creative.performance >= 0.8 ? "bg-yellow-500" : "bg-red-500"
+                    )}>
+                      {creative.performance >= 1.5 ? "A" :
+                       creative.performance >= 1.3 ? "B" :
+                       creative.performance >= 1 ? "C" :
+                       creative.performance >= 0.8 ? "D" : "F"}
+                    </div>
+                  </div>
+                  
+                  <p className="text-muted-foreground mb-4">
+                    This creative is performing 
+                    <span className={cn(
+                      "font-semibold mx-1",
+                      creative.performance >= 1 ? "text-green-600" : "text-red-600"
+                    )}>
+                      {creative.performance >= 1 ? 
+                        `${((creative.performance - 1) * 100).toFixed(0)}% above` : 
+                        `${((1 - creative.performance) * 100).toFixed(0)}% below`
+                      }
+                    </span>
+                    the account average.
+                  </p>
+                  
+                  <PerformanceBenchmarkChart metrics={performanceMetrics} />
+                </CardContent>
+              </Card>
               
-              <div className="rounded-lg border p-4 bg-card/50">
-                <h4 className="text-sm font-medium mb-2">Performance by Platform Placement</h4>
+              <BenchmarkComparison 
+                metrics={performanceMetrics}
+                comparisonTitle="Industry Benchmark Comparison"
+              />
+            </TabsContent>
+            
+            <TabsContent value="platforms" className="space-y-4 pt-4">
+              <Card>
+                <CardContent className="pt-6">
+                  <div className="mb-6">
+                    <h3 className="text-lg font-semibold mb-2">Platform Performance</h3>
+                    <p className="text-muted-foreground">
+                      Compare how this creative performs across different placement types
+                    </p>
+                  </div>
+                  
+                  <BenchmarkComparison 
+                    metrics={platformBenchmarks}
+                    comparisonTitle="Platform CTR Comparison"
+                  />
+                </CardContent>
+              </Card>
+              
+              <div className="rounded-lg border p-4 bg-card">
+                <h4 className="text-sm font-medium mb-3">Best Performing Platforms</h4>
                 <div className="space-y-2">
                   <div className="flex justify-between items-center">
-                    <span className="text-sm">Facebook Feed</span>
-                    <span className="text-sm font-medium">+12%</span>
+                    <div className="flex items-center">
+                      <div className="w-2 h-2 bg-green-500 rounded-full mr-2"></div>
+                      <span className="text-sm">Instagram Stories</span>
+                    </div>
+                    <span className="text-sm font-medium text-green-600">+30% vs avg</span>
                   </div>
                   <div className="flex justify-between items-center">
-                    <span className="text-sm">Instagram Feed</span>
-                    <span className="text-sm font-medium">+8%</span>
+                    <div className="flex items-center">
+                      <div className="w-2 h-2 bg-green-500 rounded-full mr-2"></div>
+                      <span className="text-sm">Instagram Feed</span>
+                    </div>
+                    <span className="text-sm font-medium text-green-600">+10% vs avg</span>
                   </div>
                   <div className="flex justify-between items-center">
-                    <span className="text-sm">Instagram Stories</span>
-                    <span className="text-sm font-medium">+23%</span>
+                    <div className="flex items-center">
+                      <div className="w-2 h-2 bg-red-500 rounded-full mr-2"></div>
+                      <span className="text-sm">Facebook Feed</span>
+                    </div>
+                    <span className="text-sm font-medium text-red-600">-10% vs avg</span>
                   </div>
                   <div className="flex justify-between items-center">
-                    <span className="text-sm">Facebook Right Column</span>
-                    <span className="text-sm font-medium">-5%</span>
+                    <div className="flex items-center">
+                      <div className="w-2 h-2 bg-red-500 rounded-full mr-2"></div>
+                      <span className="text-sm">Facebook Right Column</span>
+                    </div>
+                    <span className="text-sm font-medium text-red-600">-30% vs avg</span>
                   </div>
                 </div>
               </div>
             </TabsContent>
             
             <TabsContent value="audiences" className="space-y-4 pt-4">
-              <div className="rounded-lg border p-4 bg-card/50">
+              <div className="rounded-lg border p-4 bg-card">
                 <h4 className="text-sm font-medium mb-2">Top Performing Audiences</h4>
                 <div className="space-y-3">
                   <div className="flex justify-between items-center">
@@ -306,7 +427,7 @@ export function CreativeDetail({ creative, isOpen, onClose, themes }: CreativeDe
                 </div>
               </div>
               
-              <div className="rounded-lg border p-4 bg-card/50">
+              <div className="rounded-lg border p-4 bg-card">
                 <h4 className="text-sm font-medium mb-2">Demographic Performance</h4>
                 <div className="space-y-3">
                   <div>

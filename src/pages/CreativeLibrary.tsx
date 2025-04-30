@@ -6,6 +6,7 @@ import { CreativeFilters } from "@/components/CreativeLibrary/CreativeFilters";
 import { CreativeGrid } from "@/components/CreativeLibrary/CreativeGrid";
 import { CreativeDetail } from "@/components/CreativeLibrary/CreativeDetail";
 import { generateCreativeThemes, generateCreatives } from "@/utils/mockData";
+import { toast } from "@/components/ui/use-toast";
 
 export interface Creative {
   id: string;
@@ -25,6 +26,30 @@ export interface Creative {
   endDate: string;
   themes: string[];
   status: "active" | "paused" | "archived";
+  // Benchmarking data
+  benchmarks?: {
+    industry?: {
+      ctr: number;
+      cpc: number;
+      cpm: number;
+      convRate: number;
+      roas: number;
+    };
+    account?: {
+      ctr: number;
+      cpc: number;
+      cpm: number;
+      convRate: number;
+      roas: number;
+    };
+    platforms?: {
+      [key: string]: {
+        ctr: number;
+        cpc: number;
+        convRate: number;
+      };
+    };
+  };
 }
 
 export default function CreativeLibrary() {
@@ -45,6 +70,10 @@ export default function CreativeLibrary() {
     setIsLoading(true);
     setTimeout(() => {
       setCreatives(generateCreatives());
+      toast({
+        title: "Creative library refreshed",
+        description: "The latest creative performance data has been loaded.",
+      });
       setIsLoading(false);
     }, 800);
   };
