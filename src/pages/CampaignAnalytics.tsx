@@ -3,7 +3,7 @@ import { AppLayout } from "@/components/Layout/AppLayout";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { LineChart, BarChart3, PieChart, ArrowUpRight, ArrowDownRight, DollarSign } from "lucide-react";
-import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, Legend } from "recharts";
+import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, Legend, Pie, Cell } from "recharts";
 
 // Mock data for campaign performance
 const campaignPerformanceData = [
@@ -183,7 +183,7 @@ export default function CampaignAnalytics() {
                     ))}
                   </Pie>
                   <Tooltip />
-                </ResponsiveContainer>
+                </PieChart>
               </ResponsiveContainer>
             </CardContent>
           </Card>

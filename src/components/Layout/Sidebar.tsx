@@ -5,15 +5,12 @@ import { Link, useLocation } from "react-router-dom";
 import {
   LayoutDashboard,
   LineChart,
-  Users,
   Image,
   Settings,
   Menu,
   ChevronLeft,
   LightbulbIcon,
-  TargetIcon,
-  MonitorIcon,
-  Gauge
+  Users
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -90,31 +87,10 @@ export function Sidebar() {
           collapsed={collapsed}
         />
         <SidebarItem
-          icon={TargetIcon}
-          label="Audience Insights"
-          to="/audience"
-          active={location.pathname === "/audience"}
-          collapsed={collapsed}
-        />
-        <SidebarItem
           icon={LightbulbIcon}
           label="AI Insights"
           to="/insights"
           active={location.pathname === "/insights"}
-          collapsed={collapsed}
-        />
-        <SidebarItem
-          icon={MonitorIcon}
-          label="Monitoring"
-          to="/monitoring"
-          active={location.pathname === "/monitoring"}
-          collapsed={collapsed}
-        />
-        <SidebarItem
-          icon={Gauge}
-          label="Performance Tools"
-          to="/tools"
-          active={location.pathname === "/tools"}
           collapsed={collapsed}
         />
       </div>
