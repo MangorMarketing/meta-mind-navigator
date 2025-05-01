@@ -7,6 +7,8 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import Index from "./pages/Index";
 import NotFound from "./pages/NotFound";
 import CreativeLibrary from "./pages/CreativeLibrary";
+import CampaignAnalytics from "./pages/CampaignAnalytics";
+import AIInsights from "./pages/AIInsights";
 
 const queryClient = new QueryClient();
 
@@ -19,6 +21,8 @@ const App = () => (
         <Routes>
           <Route path="/" element={<Index />} />
           <Route path="/creative-library" element={<CreativeLibrary />} />
+          <Route path="/analytics" element={<CampaignAnalytics />} />
+          <Route path="/insights" element={<AIInsights />} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
         </Routes>
