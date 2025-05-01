@@ -134,7 +134,7 @@ export function CreativeFilters({ filters, onFilterChange, themes }: CreativeFil
                 <SelectValue placeholder="All types" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">All types</SelectItem>
+                <SelectItem value="all">All types</SelectItem>
                 <SelectItem value="image">Images</SelectItem>
                 <SelectItem value="video">Videos</SelectItem>
               </SelectContent>
@@ -151,7 +151,7 @@ export function CreativeFilters({ filters, onFilterChange, themes }: CreativeFil
                 <SelectValue placeholder="All themes" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">All themes</SelectItem>
+                <SelectItem value="all">All themes</SelectItem>
                 {themes.map((theme) => (
                   <SelectItem key={theme.id} value={theme.name}>
                     {theme.name}
@@ -171,7 +171,7 @@ export function CreativeFilters({ filters, onFilterChange, themes }: CreativeFil
                 <SelectValue placeholder="All statuses" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">All statuses</SelectItem>
+                <SelectItem value="all">All statuses</SelectItem>
                 <SelectItem value="active">Active</SelectItem>
                 <SelectItem value="paused">Paused</SelectItem>
                 <SelectItem value="archived">Archived</SelectItem>

@@ -19,37 +19,45 @@ interface BenchmarkComparisonProps {
 export function BenchmarkComparison({ metrics, comparisonTitle }: BenchmarkComparisonProps) {
   // Format helpers
   const formatValue = (metric: BenchmarkMetric) => {
+    if (!metric) return "";
+    
     if (metric.unit === "%") {
       return `${(metric.value * 100).toFixed(2)}%`;
     } else if (metric.unit === "$") {
       return `$${metric.value.toFixed(2)}`;
     } else {
-      return `${metric.value}${metric.unit}`;
+      return `${metric.value}${metric.unit || ""}`;
     }
   };
   
   const formatBenchmark = (metric: BenchmarkMetric) => {
+    if (!metric) return "";
+    
     if (metric.unit === "%") {
       return `${(metric.benchmark * 100).toFixed(2)}%`;
     } else if (metric.unit === "$") {
       return `$${metric.benchmark.toFixed(2)}`;
     } else {
-      return `${metric.benchmark}${metric.unit}`;
+      return `${metric.benchmark}${metric.unit || ""}`;
     }
   };
   
   const getPerformance = (metric: BenchmarkMetric) => {
+    if (!metric) return "0";
+    
     const performance = metric.value / metric.benchmark;
     return performance.toFixed(2);
   };
   
   const getDifference = (metric: BenchmarkMetric) => {
+    if (!metric) return { value: "0", isPositive: false };
+    
     const diff = metric.value - metric.benchmark;
     const formattedDiff = metric.unit === "%" 
       ? `${(diff * 100).toFixed(2)}%` 
       : metric.unit === "$"
         ? `$${diff.toFixed(2)}`
-        : `${diff.toFixed(2)}${metric.unit}`;
+        : `${diff.toFixed(2)}${metric.unit || ""}`;
     
     return {
       value: formattedDiff,
@@ -72,6 +80,8 @@ export function BenchmarkComparison({ metrics, comparisonTitle }: BenchmarkCompa
         </TableHeader>
         <TableBody>
           {metrics.map((metric, i) => {
+            if (!metric) return null;
+            
             const diff = getDifference(metric);
             return (
               <TableRow key={`${metric.name}-${i}`}>

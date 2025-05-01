@@ -98,17 +98,17 @@ export default function CreativeLibrary() {
     }
     
     // Filter by type
-    if (filters.type && creative.type !== filters.type) {
+    if (filters.type && filters.type !== "all" && creative.type !== filters.type) {
       return false;
     }
     
     // Filter by theme
-    if (filters.theme && !creative.themes.includes(filters.theme)) {
+    if (filters.theme && filters.theme !== "all" && !creative.themes.includes(filters.theme)) {
       return false;
     }
     
     // Filter by status
-    if (filters.status && creative.status !== filters.status) {
+    if (filters.status && filters.status !== "all" && creative.status !== filters.status) {
       return false;
     }
     

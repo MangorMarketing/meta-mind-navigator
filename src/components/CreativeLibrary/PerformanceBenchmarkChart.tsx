@@ -136,9 +136,14 @@ export function PerformanceBenchmarkChart({ metrics }: PerformanceBenchmarkChart
               <LabelList 
                 dataKey="value" 
                 position="right"
-                formatter={(value: number, entry: any) => 
-                  `${value}${entry.unit || ''}`
-                }
+                formatter={(value: number, entry: any) => {
+                  // Handle the case where entry might be undefined
+                  if (!entry || typeof entry !== 'object') return value;
+                  
+                  // Safely access the unit property
+                  const unit = entry.unit || '';
+                  return `${value}${unit}`;
+                }}
               />
             </Bar>
           </BarChart>
