@@ -1,4 +1,3 @@
-
 import {
   Sheet,
   SheetContent,
@@ -29,7 +28,8 @@ import {
   Trash,
   TrendingUp,
   TrendingDown,
-  Gauge
+  Gauge,
+  Lightbulb
 } from "lucide-react";
 
 import { cn } from "@/lib/utils";
@@ -37,6 +37,7 @@ import { Creative } from "@/pages/CreativeLibrary";
 import { CreativeTheme } from "@/utils/mockData";
 import { PerformanceBenchmarkChart, BenchmarkMetric } from "./PerformanceBenchmarkChart";
 import { BenchmarkComparison } from "./BenchmarkComparison";
+import { AIInsights } from "./AIInsights";
 
 interface CreativeDetailProps {
   creative: Creative;
@@ -244,11 +245,17 @@ export function CreativeDetail({ creative, isOpen, onClose, themes }: CreativeDe
           
           {/* Performance Tabs */}
           <Tabs defaultValue="metrics">
-            <TabsList className="grid w-full grid-cols-4">
+            <TabsList className="grid w-full grid-cols-5">
               <TabsTrigger value="metrics">Key Metrics</TabsTrigger>
               <TabsTrigger value="benchmarks">Benchmarks</TabsTrigger>
               <TabsTrigger value="platforms">Platform Comparison</TabsTrigger>
               <TabsTrigger value="audiences">Audiences</TabsTrigger>
+              <TabsTrigger value="insights" className="relative">
+                Insights
+                <span className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-primary text-[10px] text-primary-foreground">
+                  5
+                </span>
+              </TabsTrigger>
             </TabsList>
             
             <TabsContent value="metrics" className="space-y-4 pt-4">
@@ -453,6 +460,10 @@ export function CreativeDetail({ creative, isOpen, onClose, themes }: CreativeDe
                   </div>
                 </div>
               </div>
+            </TabsContent>
+            
+            <TabsContent value="insights" className="space-y-4 pt-4">
+              <AIInsights creative={creative} />
             </TabsContent>
           </Tabs>
           

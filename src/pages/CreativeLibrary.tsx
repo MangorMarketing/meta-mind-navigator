@@ -1,11 +1,12 @@
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { AppLayout } from "@/components/Layout/AppLayout";
 import { CreativeHeader } from "@/components/CreativeLibrary/CreativeHeader";
 import { CreativeFilters } from "@/components/CreativeLibrary/CreativeFilters";
 import { CreativeGrid } from "@/components/CreativeLibrary/CreativeGrid";
 import { CreativeDetail } from "@/components/CreativeLibrary/CreativeDetail";
 import { generateCreativeThemes, generateCreatives } from "@/utils/mockData";
+import { generateInsightsForCreative } from "@/utils/aiInsights";
 import { toast } from "@/components/ui/use-toast";
 
 export interface Creative {
@@ -50,10 +51,21 @@ export interface Creative {
       };
     };
   };
+  // AI insights data
+  aiInsightsCount?: number;
 }
 
 export default function CreativeLibrary() {
-  const [creatives, setCreatives] = useState<Creative[]>(() => generateCreatives());
+  const [creatives, setCreatives] = useState<Creative[]>(() => {
+    const initialCreatives = generateCreatives();
+    
+    // Add AI insights counts to creatives
+    return initialCreatives.map(creative => ({
+      ...creative,
+      aiInsightsCount: Math.floor(Math.random() * 6) + 1  // Random 1-6 insights
+    }));
+  });
+  
   const [themes] = useState(() => generateCreativeThemes());
   const [selectedCreative, setSelectedCreative] = useState<Creative | null>(null);
   const [isDetailOpen, setIsDetailOpen] = useState(false);
@@ -69,18 +81,34 @@ export default function CreativeLibrary() {
   const handleRefresh = () => {
     setIsLoading(true);
     setTimeout(() => {
-      setCreatives(generateCreatives());
+      const newCreatives = generateCreatives().map(creative => ({
+        ...creative,
+        aiInsightsCount: Math.floor(Math.random() * 6) + 1  // Random 1-6 insights
+      }));
+      
+      setCreatives(newCreatives);
       toast({
         title: "Creative library refreshed",
-        description: "The latest creative performance data has been loaded.",
+        description: "The latest creative performance data and AI insights have been loaded.",
       });
       setIsLoading(false);
     }, 800);
   };
   
   const handleSelectCreative = (creative: Creative) => {
+    // When a creative is selected, we could generate real-time insights
+    // This simulates an API call to get insights
     setSelectedCreative(creative);
     setIsDetailOpen(true);
+    
+    // In a real app, this would be an API call to generate insights
+    // For demo purposes, we'll just show a toast to simulate this happening
+    setTimeout(() => {
+      toast({
+        title: "AI insights generated",
+        description: `${creative.aiInsightsCount} optimization opportunities identified for "${creative.name}"`,
+      });
+    }, 500);
   };
   
   const handleCloseDetail = () => {
