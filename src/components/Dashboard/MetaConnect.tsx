@@ -98,8 +98,8 @@ export function MetaConnect({ onSuccess }: MetaConnectProps) {
   };
 
   return (
-    <Card>
-      <CardHeader>
+    <Card className="shadow-lg border-blue-100">
+      <CardHeader className="bg-gradient-to-r from-blue-50 to-blue-100">
         <CardTitle className="flex items-center gap-2">
           <Facebook className="h-5 w-5 text-blue-600" />
           Connect Meta Account
