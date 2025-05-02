@@ -53,79 +53,37 @@ serve(async (req) => {
     if (metaError || !metaConnection) {
       console.log('No Meta connection found for user', user.id);
       
-      // If no Meta connection exists, try to create one with the provided API token
-      const META_API_TOKEN = Deno.env.get('META_API_TOKEN');
-      const META_APP_ID = Deno.env.get('META_APP_ID');
-      
-      if (!META_API_TOKEN) {
-        return new Response(
-          JSON.stringify({ 
-            error: 'No Meta API token configured',
-            message: 'Please configure a Meta API token in the project settings' 
-          }),
-          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
-      }
-      
-      // Try to get user account information from Meta API
-      const userAccountResponse = await fetch(
-        `https://graph.facebook.com/v18.0/me?fields=id,name&access_token=${META_API_TOKEN}`,
-        { method: 'GET' }
+      return new Response(
+        JSON.stringify({ 
+          error: 'No Meta connection found',
+          message: 'Please connect your Meta account first' 
+        }),
+        { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
-      
-      const userAccountData = await userAccountResponse.json();
-      
-      if (userAccountData.error) {
-        console.error('Error fetching Meta user account:', userAccountData.error);
-        return new Response(
-          JSON.stringify({ 
-            error: 'Failed to fetch Meta user account', 
-            details: userAccountData.error 
-          }),
-          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
-      }
-      
-      // Create a new Meta connection for the user
-      const { data: newConnection, error: insertError } = await supabaseClient
-        .from('meta_connections')
-        .insert({
-          user_id: user.id,
-          access_token: META_API_TOKEN,
-          business_id: userAccountData.id
-        })
-        .select('*')
-        .single();
-      
-      if (insertError) {
-        console.error('Error creating Meta connection:', insertError);
-        return new Response(
-          JSON.stringify({ 
-            error: 'Failed to create Meta connection', 
-            details: insertError 
-          }),
-          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
-      }
-      
-      // Update user's meta_connected status
-      await supabaseClient
-        .from('profiles')
-        .update({ meta_connected: true })
-        .eq('id', user.id);
-      
-      // Use the newly created connection
-      metaConnection = newConnection;
     }
-
-    // Use Meta API to fetch real campaign data
-    const META_API_TOKEN = metaConnection.access_token || Deno.env.get('META_API_TOKEN');
+    
+    // Check if token is expired
+    const now = new Date();
+    const tokenExpiresAt = metaConnection.token_expires_at ? new Date(metaConnection.token_expires_at) : null;
+    
+    if (tokenExpiresAt && now > tokenExpiresAt) {
+      return new Response(
+        JSON.stringify({ 
+          error: 'Meta access token expired', 
+          message: 'Your Meta connection has expired. Please reconnect your account.' 
+        }),
+        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+    
+    // Get access token from connection
+    const META_API_TOKEN = metaConnection.access_token;
     
     if (!META_API_TOKEN) {
       return new Response(
         JSON.stringify({ 
           error: 'No Meta API token available',
-          message: 'Please connect your Meta account or configure a Meta API token' 
+          message: 'Please reconnect your Meta account' 
         }),
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
@@ -200,12 +158,43 @@ serve(async (req) => {
     
     console.log(`Received ${campaignsData.data?.length || 0} campaigns from Meta API`);
     
+    // If there are no campaigns, return an empty array with zero insights
+    if (!campaignsData.data || campaignsData.data.length === 0) {
+      return new Response(
+        JSON.stringify({
+          campaigns: [],
+          insights: {
+            totalSpent: 0,
+            totalResults: 0,
+            averageCPA: 0,
+            averageROI: 0
+          }
+        }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+    
     // Transform the campaign data to match our expected format
     const processedCampaigns = campaignsData.data.map(campaign => {
       const insights = campaign.insights?.data?.[0] || {};
-      const conversions = insights.conversions || 0;
+      const conversionsValue = insights.conversions || 0;
+      let conversions = 0;
+      
+      // Handle different conversion formats from the API
+      if (typeof conversionsValue === 'object') {
+        // If it's an object with actions, sum them up
+        if (Array.isArray(conversionsValue.actions)) {
+          conversions = conversionsValue.actions.reduce((sum, action) => sum + (parseInt(action.value) || 0), 0);
+        } else {
+          // If it's some other format, try to get a number or default to 0
+          conversions = parseInt(conversionsValue.toString()) || 0;
+        }
+      } else {
+        conversions = parseInt(conversionsValue.toString()) || 0;
+      }
+      
       const spent = parseFloat(campaign.spend || '0');
-      const results = parseInt(conversions.toString() || '0');
+      const results = conversions;
       
       return {
         id: campaign.id,
@@ -217,12 +206,12 @@ serve(async (req) => {
         cpa: results > 0 ? spent / results : 0,
         roi: results > 0 ? (results * 100) / spent : 0, // Assuming $100 value per conversion
         objective: campaign.objective,
-        ctr: insights.ctr || 0,
-        impressions: insights.impressions || 0,
-        reach: insights.reach || 0,
-        clicks: insights.clicks || 0,
-        cpc: insights.cpc || 0,
-        cpm: insights.cpm || 0
+        ctr: parseFloat(insights.ctr || '0'),
+        impressions: parseInt(insights.impressions || '0'),
+        reach: parseInt(insights.reach || '0'),
+        clicks: parseInt(insights.clicks || '0'),
+        cpc: parseFloat(insights.cpc || '0'),
+        cpm: parseFloat(insights.cpm || '0')
       };
     });
     

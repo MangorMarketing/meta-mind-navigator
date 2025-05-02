@@ -19,7 +19,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
-import { ArrowUpDown, MoreHorizontal, Search, Trash, Edit, Copy, TrendingUp } from "lucide-react";
+import { ArrowUpDown, MoreHorizontal, Search, Trash, Edit, Copy, TrendingUp, Loader2 } from "lucide-react";
 
 // Update the interface to match the MetaCampaign structure from our API
 export interface MetaCampaign {
@@ -43,9 +43,10 @@ export interface MetaCampaign {
 interface CampaignsTableProps {
   campaigns: MetaCampaign[];
   className?: string;
+  isLoading?: boolean;
 }
 
-export function CampaignsTable({ campaigns, className }: CampaignsTableProps) {
+export function CampaignsTable({ campaigns, className, isLoading = false }: CampaignsTableProps) {
   const [searchQuery, setSearchQuery] = useState("");
   const [sortField, setSortField] = useState<keyof MetaCampaign>("roi");
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("desc");
@@ -208,7 +209,16 @@ export function CampaignsTable({ campaigns, className }: CampaignsTableProps) {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {sortedCampaigns.length > 0 ? (
+              {isLoading ? (
+                <TableRow>
+                  <TableCell colSpan={7} className="h-24 text-center">
+                    <div className="flex justify-center items-center">
+                      <Loader2 className="h-6 w-6 animate-spin mr-2" />
+                      <span>Loading campaign data...</span>
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ) : sortedCampaigns.length > 0 ? (
                 sortedCampaigns.map((campaign) => (
                   <TableRow key={campaign.id}>
                     <TableCell className="font-medium">{campaign.name}</TableCell>
@@ -260,7 +270,7 @@ export function CampaignsTable({ campaigns, className }: CampaignsTableProps) {
               ) : (
                 <TableRow>
                   <TableCell colSpan={7} className="h-24 text-center">
-                    No campaigns found.
+                    {searchQuery ? "No campaigns match your search." : "No campaigns found."}
                   </TableCell>
                 </TableRow>
               )}

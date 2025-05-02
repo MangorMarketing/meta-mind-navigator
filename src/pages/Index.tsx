@@ -7,6 +7,7 @@ import { PerformanceChart } from "@/components/Dashboard/PerformanceChart";
 import { ThemeExplorer } from "@/components/Dashboard/ThemeExplorer";
 import { InsightsFeed } from "@/components/Dashboard/InsightsFeed";
 import { CampaignsTable, MetaCampaign } from "@/components/Dashboard/CampaignsTable";
+import { MetaConnect } from "@/components/Dashboard/MetaConnect";
 import { 
   DollarSign, 
   TrendingUp, 
@@ -51,8 +52,31 @@ export default function Index() {
   });
   const [isLoading, setIsLoading] = useState(true);
   const [apiError, setApiError] = useState<string | null>(null);
+  const [isMetaConnected, setIsMetaConnected] = useState(false);
   const { user } = useAuth();
   const { toast } = useToast();
+  
+  const checkMetaConnection = async () => {
+    if (!user) return false;
+    
+    try {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('meta_connected')
+        .eq('id', user.id)
+        .single();
+        
+      if (error) {
+        console.error('Error checking Meta connection:', error);
+        return false;
+      }
+      
+      return data?.meta_connected || false;
+    } catch (error) {
+      console.error('Error in checkMetaConnection:', error);
+      return false;
+    }
+  };
   
   const fetchMetaCampaigns = async () => {
     setIsLoading(true);
@@ -82,7 +106,8 @@ export default function Index() {
           totalSpend: metaData.insights.totalSpent,
           totalRevenue: metaData.insights.totalResults * 100, // Assuming $100 value per result
           roas: metaData.insights.averageROI / 100, // Convert from percentage to multiplier
-          ctr: metaData.campaigns.reduce((sum, camp) => sum + (camp.ctr || 0), 0) / metaData.campaigns.length, // Average CTR
+          ctr: metaData.campaigns.reduce((sum, camp) => sum + (camp.ctr || 0), 0) / 
+               (metaData.campaigns.length || 1), // Average CTR
           conversions: metaData.insights.totalResults
         });
       }
@@ -100,14 +125,38 @@ export default function Index() {
   };
   
   useEffect(() => {
-    if (user) {
-      fetchMetaCampaigns();
-    } else {
-      setIsLoading(false);
-    }
+    const initializeDashboard = async () => {
+      if (user) {
+        const metaConnected = await checkMetaConnection();
+        setIsMetaConnected(metaConnected);
+        
+        if (metaConnected) {
+          fetchMetaCampaigns();
+        } else {
+          setIsLoading(false);
+        }
+      } else {
+        setIsLoading(false);
+      }
+    };
+    
+    initializeDashboard();
   }, [user]);
   
   const handleRefreshData = () => {
+    if (isMetaConnected) {
+      fetchMetaCampaigns();
+    } else {
+      toast({
+        title: "Meta Account Not Connected",
+        description: "Please connect your Meta account to fetch campaign data.",
+        variant: "destructive",
+      });
+    }
+  };
+  
+  const handleMetaConnectSuccess = () => {
+    setIsMetaConnected(true);
     fetchMetaCampaigns();
   };
   
@@ -116,69 +165,85 @@ export default function Index() {
       <div className="page-transition">
         <DashboardHeader title="Meta Ads Performance Dashboard" onRefresh={handleRefreshData} />
         
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
-          <StatCard
-            title="Total Spend"
-            value={keyMetrics.totalSpend}
-            format="currency"
-            trend={8.2}
-            icon={<DollarSign className="h-4 w-4" />}
-          />
-          
-          <StatCard
-            title="Total Revenue"
-            value={keyMetrics.totalRevenue}
-            format="currency"
-            trend={12.5}
-            icon={<TrendingUp className="h-4 w-4" />}
-          />
-          
-          <StatCard
-            title="ROAS"
-            value={keyMetrics.roas}
-            trend={4.3}
-            icon={<BarChart4 className="h-4 w-4" />}
-          />
-          
-          <StatCard
-            title="CTR"
-            value={keyMetrics.ctr}
-            format="percentage"
-            trend={-1.8}
-            invertTrend={true}
-            icon={<MousePointer className="h-4 w-4" />}
-          />
-          
-          <StatCard
-            title="Conversions"
-            value={keyMetrics.conversions}
-            trend={5.7}
-            icon={<ShoppingCart className="h-4 w-4" />}
-          />
-        </div>
+        {!isMetaConnected && user ? (
+          <div className="mb-6">
+            <MetaConnect onSuccess={handleMetaConnectSuccess} />
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
+            <StatCard
+              title="Total Spend"
+              value={keyMetrics.totalSpend}
+              format="currency"
+              trend={8.2}
+              icon={<DollarSign className="h-4 w-4" />}
+            />
+            
+            <StatCard
+              title="Total Revenue"
+              value={keyMetrics.totalRevenue}
+              format="currency"
+              trend={12.5}
+              icon={<TrendingUp className="h-4 w-4" />}
+            />
+            
+            <StatCard
+              title="ROAS"
+              value={keyMetrics.roas}
+              trend={4.3}
+              icon={<BarChart4 className="h-4 w-4" />}
+            />
+            
+            <StatCard
+              title="CTR"
+              value={keyMetrics.ctr}
+              format="percentage"
+              trend={-1.8}
+              invertTrend={true}
+              icon={<MousePointer className="h-4 w-4" />}
+            />
+            
+            <StatCard
+              title="Conversions"
+              value={keyMetrics.conversions}
+              trend={5.7}
+              icon={<ShoppingCart className="h-4 w-4" />}
+            />
+          </div>
+        )}
         
         {apiError && (
           <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-6">
             <p>{apiError}</p>
             <p className="text-sm mt-1">
-              You may need to connect your Meta account first or check your API credentials.
+              {!isMetaConnected 
+                ? "You need to connect your Meta account first." 
+                : "Check your API credentials or try again later."}
             </p>
           </div>
         )}
         
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
-          <PerformanceChart 
-            data={dailyData} 
-            title="Performance Over Time"
-            className="lg:col-span-2"
-          />
-          <ThemeExplorer themes={creativeThemes} />
-        </div>
-        
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
-          <CampaignsTable campaigns={campaigns} className="lg:col-span-2" />
-          <InsightsFeed insights={aiInsights} />
-        </div>
+        {isMetaConnected && (
+          <>
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+              <PerformanceChart 
+                data={dailyData} 
+                title="Performance Over Time"
+                className="lg:col-span-2"
+              />
+              <ThemeExplorer themes={creativeThemes} />
+            </div>
+            
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+              <CampaignsTable 
+                campaigns={campaigns} 
+                className="lg:col-span-2" 
+                isLoading={isLoading}
+              />
+              <InsightsFeed insights={aiInsights} />
+            </div>
+          </>
+        )}
       </div>
     </AppLayout>
   );

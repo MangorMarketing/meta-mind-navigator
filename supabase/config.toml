@@ -1,8 +1,10 @@
 
-project_id = "nuwkzferusgzzfcnrkgu"
-
+[functions]
 [functions.meta-campaigns]
 verify_jwt = true
-
 [functions.ai-insights]
+verify_jwt = true
+[functions.init-meta-connection]
+verify_jwt = true
+[functions.complete-meta-connection]
 verify_jwt = true
