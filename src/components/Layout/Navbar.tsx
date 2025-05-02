@@ -11,16 +11,40 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { BellIcon, SearchIcon, HelpCircleIcon, Settings, LogOut } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
+import { useAuth } from "@/contexts/AuthContext";
 
 export function Navbar() {
   const { toast } = useToast();
+  const { user, signOut } = useAuth();
+  const navigate = useNavigate();
 
   const handleNotification = () => {
     toast({
       title: "Notifications",
       description: "You have 3 unread notifications",
     });
+  };
+
+  const handleSignOut = async () => {
+    try {
+      await signOut();
+      navigate("/auth");
+    } catch (error) {
+      console.error("Error signing out:", error);
+    }
+  };
+
+  // Extract user initials for avatar fallback
+  const getUserInitials = () => {
+    if (!user) return "MM";
+    
+    const email = user.email || "";
+    if (email) {
+      return email.substring(0, 2).toUpperCase();
+    }
+    
+    return "MM";
   };
 
   return (
@@ -56,16 +80,18 @@ export function Navbar() {
               >
                 <Avatar className="h-8 w-8">
                   <AvatarImage src="" alt="User" />
-                  <AvatarFallback className="bg-brand text-white">MM</AvatarFallback>
+                  <AvatarFallback className="bg-brand text-white">{getUserInitials()}</AvatarFallback>
                 </Avatar>
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent className="w-56" align="end" forceMount>
               <DropdownMenuLabel className="font-normal">
                 <div className="flex flex-col space-y-1">
-                  <p className="text-sm font-medium leading-none">Media Buyer</p>
+                  <p className="text-sm font-medium leading-none">
+                    {user?.email || "Media Buyer"}
+                  </p>
                   <p className="text-xs leading-none text-muted-foreground">
-                    user@example.com
+                    {user?.email || "user@example.com"}
                   </p>
                 </div>
               </DropdownMenuLabel>
@@ -80,7 +106,7 @@ export function Navbar() {
                 <span>Settings</span>
               </DropdownMenuItem>
               <DropdownMenuSeparator />
-              <DropdownMenuItem>
+              <DropdownMenuItem onClick={handleSignOut}>
                 <LogOut className="mr-2 h-4 w-4" />
                 <span>Log out</span>
               </DropdownMenuItem>
