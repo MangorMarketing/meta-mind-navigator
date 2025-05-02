@@ -1,4 +1,3 @@
-
 import { useEffect, useState } from "react";
 import { AppLayout } from "@/components/Layout/AppLayout";
 import { DashboardHeader } from "@/components/Dashboard/DashboardHeader";
@@ -6,7 +5,7 @@ import { StatCard } from "@/components/Dashboard/StatCard";
 import { PerformanceChart } from "@/components/Dashboard/PerformanceChart";
 import { ThemeExplorer } from "@/components/Dashboard/ThemeExplorer";
 import { InsightsFeed } from "@/components/Dashboard/InsightsFeed";
-import { CampaignsTable } from "@/components/Dashboard/CampaignsTable";
+import { CampaignsTable, MetaCampaign } from "@/components/Dashboard/CampaignsTable";
 import { 
   DollarSign, 
   TrendingUp, 
@@ -24,23 +23,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 
-// Define types for our Meta API responses
-interface MetaCampaign {
-  id: string;
-  name: string;
-  status: string;
-  budget: number;
-  spent: number;
-  results: number;
-  cpa: number;
-  roi: number;
-  objective?: string;
-  ctr?: number;
-  impressions?: number;
-  reach?: number;
-  clicks?: number;
-}
-
+// Define types for our Meta API response
 interface MetaInsights {
   totalSpent: number;
   totalResults: number;

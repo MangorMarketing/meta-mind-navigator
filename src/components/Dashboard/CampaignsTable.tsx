@@ -19,17 +19,35 @@ import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
-import { CampaignPerformance } from "@/utils/mockData";
 import { ArrowUpDown, MoreHorizontal, Search, Trash, Edit, Copy, TrendingUp } from "lucide-react";
 
+// Update the interface to match the MetaCampaign structure from our API
+export interface MetaCampaign {
+  id: string;
+  name: string;
+  status: string;
+  budget: number;
+  spent: number;
+  results: number;
+  cpa: number;
+  roi: number;
+  objective?: string;
+  ctr?: number;
+  impressions?: number;
+  reach?: number;
+  clicks?: number;
+  cpc?: number;
+  cpm?: number;
+}
+
 interface CampaignsTableProps {
-  campaigns: CampaignPerformance[];
+  campaigns: MetaCampaign[];
   className?: string;
 }
 
 export function CampaignsTable({ campaigns, className }: CampaignsTableProps) {
   const [searchQuery, setSearchQuery] = useState("");
-  const [sortField, setSortField] = useState<keyof CampaignPerformance>("roas");
+  const [sortField, setSortField] = useState<keyof MetaCampaign>("roi");
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("desc");
   const { toast } = useToast();
   
@@ -54,7 +72,7 @@ export function CampaignsTable({ campaigns, className }: CampaignsTableProps) {
   });
   
   // Handle sorting
-  const handleSort = (field: keyof CampaignPerformance) => {
+  const handleSort = (field: keyof MetaCampaign) => {
     if (sortField === field) {
       setSortDirection(sortDirection === "asc" ? "desc" : "asc");
     } else {
@@ -77,7 +95,7 @@ export function CampaignsTable({ campaigns, className }: CampaignsTableProps) {
   };
   
   // Handle action buttons
-  const handleAction = (action: string, campaign: CampaignPerformance) => {
+  const handleAction = (action: string, campaign: MetaCampaign) => {
     switch (action) {
       case "edit":
         toast({
@@ -140,7 +158,7 @@ export function CampaignsTable({ campaigns, className }: CampaignsTableProps) {
                   <Button 
                     variant="ghost" 
                     className="p-0 h-auto font-medium"
-                    onClick={() => handleSort("spend")}
+                    onClick={() => handleSort("spent")}
                   >
                     Spend
                     <ArrowUpDown className="ml-2 h-3 w-3" />
@@ -150,9 +168,9 @@ export function CampaignsTable({ campaigns, className }: CampaignsTableProps) {
                   <Button 
                     variant="ghost" 
                     className="p-0 h-auto font-medium"
-                    onClick={() => handleSort("revenue")}
+                    onClick={() => handleSort("results")}
                   >
-                    Revenue
+                    Results
                     <ArrowUpDown className="ml-2 h-3 w-3" />
                   </Button>
                 </TableHead>
@@ -160,7 +178,7 @@ export function CampaignsTable({ campaigns, className }: CampaignsTableProps) {
                   <Button 
                     variant="ghost" 
                     className="p-0 h-auto font-medium"
-                    onClick={() => handleSort("roas")}
+                    onClick={() => handleSort("roi")}
                   >
                     ROAS
                     <ArrowUpDown className="ml-2 h-3 w-3" />
@@ -180,9 +198,9 @@ export function CampaignsTable({ campaigns, className }: CampaignsTableProps) {
                   <Button 
                     variant="ghost" 
                     className="p-0 h-auto font-medium"
-                    onClick={() => handleSort("conversions")}
+                    onClick={() => handleSort("cpa")}
                   >
-                    Conversions
+                    CPA
                     <ArrowUpDown className="ml-2 h-3 w-3" />
                   </Button>
                 </TableHead>
@@ -194,16 +212,16 @@ export function CampaignsTable({ campaigns, className }: CampaignsTableProps) {
                 sortedCampaigns.map((campaign) => (
                   <TableRow key={campaign.id}>
                     <TableCell className="font-medium">{campaign.name}</TableCell>
-                    <TableCell>{formatCurrency(campaign.spend)}</TableCell>
-                    <TableCell>{formatCurrency(campaign.revenue)}</TableCell>
-                    <TableCell className={campaign.roas >= 1 ? "text-green-600" : "text-red-600"}>
-                      {campaign.roas.toFixed(2)}x
+                    <TableCell>{formatCurrency(campaign.spent)}</TableCell>
+                    <TableCell>{campaign.results}</TableCell>
+                    <TableCell className={campaign.roi >= 100 ? "text-green-600" : "text-red-600"}>
+                      {(campaign.roi / 100).toFixed(2)}x
                     </TableCell>
                     <TableCell className="hidden md:table-cell">
-                      {formatPercentage(campaign.ctr)}
+                      {campaign.ctr ? formatPercentage(campaign.ctr) : "N/A"}
                     </TableCell>
                     <TableCell className="hidden md:table-cell">
-                      {campaign.conversions.toLocaleString()}
+                      {formatCurrency(campaign.cpa)}
                     </TableCell>
                     <TableCell className="text-right">
                       <DropdownMenu>
