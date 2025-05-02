@@ -15,39 +15,116 @@ import {
   ShoppingCart 
 } from "lucide-react";
 import {
-  generateDailyData,
   generateCreativeThemes,
   generateAIInsights,
-  generateCampaigns,
-  generateKeyMetrics
+  generateDailyData,
+  DailyPerformance
 } from "@/utils/mockData";
+import { useAuth } from "@/contexts/AuthContext";
+import { supabase } from "@/integrations/supabase/client";
+import { useToast } from "@/hooks/use-toast";
+
+// Define types for our Meta API responses
+interface MetaCampaign {
+  id: string;
+  name: string;
+  status: string;
+  budget: number;
+  spent: number;
+  results: number;
+  cpa: number;
+  roi: number;
+  objective?: string;
+  ctr?: number;
+  impressions?: number;
+  reach?: number;
+  clicks?: number;
+}
+
+interface MetaInsights {
+  totalSpent: number;
+  totalResults: number;
+  averageCPA: number;
+  averageROI: number;
+}
+
+interface MetaApiResponse {
+  campaigns: MetaCampaign[];
+  insights: MetaInsights;
+}
 
 export default function Index() {
-  const [dailyData, setDailyData] = useState(() => generateDailyData());
+  const [dailyData, setDailyData] = useState<DailyPerformance[]>(() => generateDailyData());
   const [creativeThemes, setCreativeThemes] = useState(() => generateCreativeThemes());
   const [aiInsights, setAIInsights] = useState(() => generateAIInsights());
-  const [campaigns, setCampaigns] = useState(() => generateCampaigns());
-  const [keyMetrics, setKeyMetrics] = useState(() => generateKeyMetrics());
+  const [campaigns, setCampaigns] = useState<MetaCampaign[]>([]);
+  const [keyMetrics, setKeyMetrics] = useState({
+    totalSpend: 0,
+    totalRevenue: 0,
+    roas: 0,
+    ctr: 0,
+    conversions: 0
+  });
   const [isLoading, setIsLoading] = useState(true);
+  const [apiError, setApiError] = useState<string | null>(null);
+  const { user } = useAuth();
+  const { toast } = useToast();
+  
+  const fetchMetaCampaigns = async () => {
+    setIsLoading(true);
+    setApiError(null);
+    
+    try {
+      const { data, error } = await supabase.functions.invoke('meta-campaigns');
+      
+      if (error) {
+        console.error('Error fetching Meta campaigns:', error);
+        setApiError('Failed to fetch campaign data');
+        toast({
+          title: "Error",
+          description: "Failed to fetch campaign data. Please try again.",
+          variant: "destructive",
+        });
+        setIsLoading(false);
+        return;
+      }
+      
+      if (data) {
+        const metaData = data as MetaApiResponse;
+        setCampaigns(metaData.campaigns);
+        
+        // Update key metrics from real data
+        setKeyMetrics({
+          totalSpend: metaData.insights.totalSpent,
+          totalRevenue: metaData.insights.totalResults * 100, // Assuming $100 value per result
+          roas: metaData.insights.averageROI / 100, // Convert from percentage to multiplier
+          ctr: metaData.campaigns.reduce((sum, camp) => sum + (camp.ctr || 0), 0) / metaData.campaigns.length, // Average CTR
+          conversions: metaData.insights.totalResults
+        });
+      }
+    } catch (error) {
+      console.error('Error in fetchMetaCampaigns:', error);
+      setApiError('Failed to process campaign data');
+      toast({
+        title: "Error",
+        description: "Failed to process campaign data. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
   
   useEffect(() => {
-    // Simulate data loading
-    const timer = setTimeout(() => {
+    if (user) {
+      fetchMetaCampaigns();
+    } else {
       setIsLoading(false);
-    }, 1000);
-    
-    return () => clearTimeout(timer);
-  }, []);
+    }
+  }, [user]);
   
   const handleRefreshData = () => {
-    setIsLoading(true);
-    
-    setTimeout(() => {
-      setDailyData(generateDailyData());
-      setCampaigns(generateCampaigns());
-      setKeyMetrics(generateKeyMetrics());
-      setIsLoading(false);
-    }, 1000);
+    fetchMetaCampaigns();
   };
   
   return (
@@ -95,6 +172,15 @@ export default function Index() {
             icon={<ShoppingCart className="h-4 w-4" />}
           />
         </div>
+        
+        {apiError && (
+          <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-6">
+            <p>{apiError}</p>
+            <p className="text-sm mt-1">
+              You may need to connect your Meta account first or check your API credentials.
+            </p>
+          </div>
+        )}
         
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
           <PerformanceChart 
