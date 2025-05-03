@@ -1,7 +1,6 @@
-
 import { useEffect, useState } from "react";
 import { AppLayout } from "@/components/Layout/AppLayout";
-import { DashboardHeader } from "@/components/Dashboard/DashboardHeader";
+import { DashboardHeader, DateRange } from "@/components/Dashboard/DashboardHeader";
 import { StatCard } from "@/components/Dashboard/StatCard";
 import { PerformanceChart } from "@/components/Dashboard/PerformanceChart";
 import { ThemeExplorer } from "@/components/Dashboard/ThemeExplorer";
@@ -36,6 +35,7 @@ interface MetaInsights {
 interface MetaApiResponse {
   campaigns: MetaCampaign[];
   insights: MetaInsights;
+  dailyData?: DailyPerformance[];
 }
 
 interface MetaConnection {
@@ -45,7 +45,7 @@ interface MetaConnection {
 
 export default function Index() {
   // State for data and loading
-  const [dailyData, setDailyData] = useState<DailyPerformance[]>(() => generateDailyData());
+  const [dailyData, setDailyData] = useState<DailyPerformance[]>([]);
   const [creativeThemes, setCreativeThemes] = useState(() => generateCreativeThemes());
   const [aiInsights, setAIInsights] = useState(() => generateAIInsights());
   const [campaigns, setCampaigns] = useState<MetaCampaign[]>([]);
@@ -56,6 +56,7 @@ export default function Index() {
     ctr: 0,
     conversions: 0
   });
+  const [dateRange, setDateRange] = useState<DateRange>("last_30_days");
 
   // State for Meta connection and ad accounts
   const [isLoading, setIsLoading] = useState(true);
@@ -93,7 +94,7 @@ export default function Index() {
       if (data) {
         setIsMetaConnected(true);
         setCurrentAdAccountId(data.ad_account_id);
-        fetchMetaCampaigns(data.ad_account_id);
+        fetchMetaCampaigns(data.ad_account_id, dateRange);
       } else {
         setIsMetaConnected(false);
         setIsLoading(false);
@@ -104,14 +105,17 @@ export default function Index() {
     }
   };
   
-  const fetchMetaCampaigns = async (adAccountId?: string) => {
+  const fetchMetaCampaigns = async (adAccountId?: string, timeRange: DateRange = "last_30_days") => {
     setIsLoading(true);
     setApiError(null);
     
     try {
-      // Pass the specific adAccountId if provided
+      // Pass the specific adAccountId and timeRange
       const { data, error } = await supabase.functions.invoke('meta-campaigns', {
-        body: adAccountId ? { adAccountId } : undefined
+        body: { 
+          adAccountId: adAccountId || undefined,
+          timeRange: timeRange
+        }
       });
       
       if (error) {
@@ -129,17 +133,30 @@ export default function Index() {
       if (data) {
         const metaData = data as MetaApiResponse;
         console.log('Fetched Meta data:', metaData);
-        setCampaigns(metaData.campaigns);
+        
+        // Update campaign data
+        setCampaigns(metaData.campaigns || []);
         
         // Update key metrics from real data
         setKeyMetrics({
-          totalSpend: metaData.insights.totalSpent,
-          totalRevenue: metaData.insights.totalResults * 100, // Assuming $100 value per result
-          roas: metaData.insights.averageROI / 100, // Convert from percentage to multiplier
+          totalSpend: metaData.insights.totalSpent || 0,
+          totalRevenue: metaData.insights.totalResults * 100 || 0, // Assuming $100 value per result
+          roas: metaData.insights.averageROI / 100 || 0, // Convert from percentage to multiplier
           ctr: metaData.campaigns.reduce((sum, camp) => sum + (camp.ctr || 0), 0) / 
-               (metaData.campaigns.length || 1), // Average CTR
-          conversions: metaData.insights.totalResults
+               (metaData.campaigns.length || 1) || 0, // Average CTR
+          conversions: metaData.insights.totalResults || 0
         });
+        
+        // Update daily performance data if available
+        if (metaData.dailyData && metaData.dailyData.length > 0) {
+          setDailyData(metaData.dailyData);
+        } else {
+          // Fallback to generated data if not available
+          setDailyData(generateDailyData());
+        }
+        
+        // Generate dynamic AI insights based on the data
+        generateAIInsightsFromData(metaData);
       }
     } catch (error) {
       console.error('Error in fetchMetaCampaigns:', error);
@@ -152,6 +169,13 @@ export default function Index() {
     } finally {
       setIsLoading(false);
     }
+  };
+  
+  const generateAIInsightsFromData = (metaData: MetaApiResponse) => {
+    // Keep the existing AI insights but potentially we could generate these based on real data
+    // For now we'll just use the mock data
+    setAIInsights(generateAIInsights());
+    setCreativeThemes(generateCreativeThemes());
   };
   
   const handleAdAccountChange = async (adAccountId: string) => {
@@ -172,8 +196,8 @@ export default function Index() {
         return;
       }
       
-      // Fetch data for the new ad account
-      fetchMetaCampaigns(adAccountId);
+      // Fetch data for the new ad account with current date range
+      fetchMetaCampaigns(adAccountId, dateRange);
       
       toast({
         title: "Ad Account Updated",
@@ -189,9 +213,17 @@ export default function Index() {
     }
   };
   
+  const handleDateRangeChange = (range: DateRange) => {
+    setDateRange(range);
+    
+    if (isMetaConnected && currentAdAccountId) {
+      fetchMetaCampaigns(currentAdAccountId, range);
+    }
+  };
+  
   const handleRefreshData = () => {
     if (isMetaConnected) {
-      fetchMetaCampaigns(currentAdAccountId || undefined);
+      fetchMetaCampaigns(currentAdAccountId || undefined, dateRange);
     } else {
       toast({
         title: "Meta Account Not Connected",
@@ -209,6 +241,8 @@ export default function Index() {
           onRefresh={handleRefreshData}
           currentAdAccountId={currentAdAccountId}
           onAdAccountChange={handleAdAccountChange}
+          dateRange={dateRange}
+          onDateRangeChange={handleDateRangeChange}
         />
         
         {!isMetaConnected ? (

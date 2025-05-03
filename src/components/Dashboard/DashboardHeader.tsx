@@ -19,21 +19,26 @@ import {
 import { AdAccountSelector } from "./AdAccountSelector";
 import { useState } from "react";
 
+export type DateRange = "today" | "yesterday" | "last_7_days" | "last_30_days" | "last_90_days";
+
 interface DashboardHeaderProps {
   title: string;
   onRefresh?: () => void;
   currentAdAccountId?: string | null;
   onAdAccountChange?: (adAccountId: string) => void;
+  dateRange: DateRange;
+  onDateRangeChange: (range: DateRange) => void;
 }
 
 export function DashboardHeader({ 
   title, 
   onRefresh, 
   currentAdAccountId, 
-  onAdAccountChange 
+  onAdAccountChange,
+  dateRange,
+  onDateRangeChange
 }: DashboardHeaderProps) {
   const { toast } = useToast();
-  const [dateRange, setDateRange] = useState("last_30_days");
   
   const handleRefresh = () => {
     if (onRefresh) {
@@ -69,12 +74,23 @@ export function DashboardHeader({
     }, 2000);
   };
 
-  const handleDateRangeChange = (range: string) => {
-    setDateRange(range);
+  const handleDateRangeChange = (range: DateRange) => {
+    onDateRangeChange(range);
     toast({
       title: "Date Range Updated",
       description: `Data now showing for: ${range.replace('_', ' ')}`
     });
+  };
+  
+  const formatDateRangeDisplay = (range: DateRange): string => {
+    switch (range) {
+      case "today": return "Today";
+      case "yesterday": return "Yesterday";
+      case "last_7_days": return "Last 7 Days";
+      case "last_30_days": return "Last 30 Days";
+      case "last_90_days": return "Last 90 Days";
+      default: return "Last 30 Days";
+    }
   };
   
   return (
@@ -92,13 +108,7 @@ export function DashboardHeader({
             <DropdownMenuTrigger asChild>
               <Button variant="outline" className="flex items-center gap-2">
                 <Calendar size={16} />
-                <span>
-                  {dateRange === "last_30_days" && "Last 30 Days"}
-                  {dateRange === "today" && "Today"}
-                  {dateRange === "yesterday" && "Yesterday"}
-                  {dateRange === "last_7_days" && "Last 7 Days"}
-                  {dateRange === "last_90_days" && "Last 90 Days"}
-                </span>
+                <span>{formatDateRangeDisplay(dateRange)}</span>
                 <ChevronDown size={14} />
               </Button>
             </DropdownMenuTrigger>

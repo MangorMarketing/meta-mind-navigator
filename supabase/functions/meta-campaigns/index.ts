@@ -7,6 +7,10 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+interface DateRanges {
+  [key: string]: { since: string; until: string };
+}
+
 serve(async (req) => {
   // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
@@ -43,14 +47,19 @@ serve(async (req) => {
       );
     }
 
-    // Check if a specific ad account ID was requested
+    // Parse request body for adAccountId and timeRange if present
     let specificAdAccountId: string | undefined;
+    let timeRange: string = 'last_30_days';
     
-    // Parse request body for adAccountId if present
     if (req.headers.get('content-type')?.includes('application/json')) {
       try {
         const requestBody = await req.json();
         specificAdAccountId = requestBody.adAccountId;
+        
+        // Handle timeRange if provided
+        if (requestBody.timeRange) {
+          timeRange = requestBody.timeRange;
+        }
       } catch (e) {
         console.log('No request body or invalid JSON');
       }
@@ -152,14 +161,48 @@ serve(async (req) => {
     }
 
     console.log('Fetching campaigns for ad account:', adAccountId);
+    console.log('Using time range:', timeRange);
     
-    // Use date parameters from Meta API for proper time range
+    // Calculate date ranges based on the selected timeRange
     const today = new Date();
-    const thirtyDaysAgo = new Date(today);
-    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+    let since: string, until: string;
     
-    const since = thirtyDaysAgo.toISOString().split('T')[0];
-    const until = today.toISOString().split('T')[0];
+    const dateRanges: DateRanges = {
+      'today': {
+        since: today.toISOString().split('T')[0],
+        until: today.toISOString().split('T')[0]
+      },
+      'yesterday': {
+        since: new Date(today.setDate(today.getDate() - 1)).toISOString().split('T')[0],
+        until: new Date(today.setDate(today.getDate())).toISOString().split('T')[0]
+      },
+      'last_7_days': {
+        since: new Date(today.setDate(today.getDate() - 7)).toISOString().split('T')[0],
+        until: new Date().toISOString().split('T')[0]
+      },
+      'last_30_days': {
+        since: new Date(today.setDate(today.getDate() - 30)).toISOString().split('T')[0],
+        until: new Date().toISOString().split('T')[0]
+      },
+      'last_90_days': {
+        since: new Date(today.setDate(today.getDate() - 90)).toISOString().split('T')[0],
+        until: new Date().toISOString().split('T')[0]
+      }
+    };
+    
+    // Get the date range based on the selected timeRange
+    if (dateRanges[timeRange]) {
+      since = dateRanges[timeRange].since;
+      until = dateRanges[timeRange].until;
+    } else {
+      // Default to last 30 days
+      const thirtyDaysAgo = new Date();
+      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+      since = thirtyDaysAgo.toISOString().split('T')[0];
+      until = today.toISOString().split('T')[0];
+    }
+    
+    console.log(`Date range: ${since} to ${until}`);
     
     // Fetch campaigns for the ad account with time range
     const campaignsResponse = await fetch(
@@ -192,7 +235,8 @@ serve(async (req) => {
             totalResults: 0,
             averageCPA: 0,
             averageROI: 0
-          }
+          },
+          dailyData: []
         }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
@@ -266,7 +310,7 @@ serve(async (req) => {
       const cpc = parseFloat(insights.cpc || '0');
       const cpm = parseFloat(insights.cpm || '0');
       const cpa = results > 0 ? spent / results : 0;
-      const roi = results > 0 ? (results * 100) / spent : 0;
+      const roi = results > 0 ? (results * 100) / spent : 0; // 100 is the assumed value per conversion
       
       return {
         id: campaign.id,
@@ -297,6 +341,57 @@ serve(async (req) => {
     const averageCPA = totalResults > 0 ? totalSpent / totalResults : 0;
     const averageROI = totalSpent > 0 ? (totalResults * 100) / totalSpent : 0;
     
+    // Fetch daily data for performance chart
+    const dailyInsightsResponse = await fetch(
+      `https://graph.facebook.com/v18.0/${adAccountId}/insights?fields=spend,actions,impressions,clicks&time_increment=1&time_range={"since":"${since}","until":"${until}"}&access_token=${META_API_TOKEN}`,
+      { method: 'GET' }
+    );
+    
+    const dailyInsightsData = await dailyInsightsResponse.json();
+    let dailyPerformance: any[] = [];
+    
+    if (!dailyInsightsData.error && dailyInsightsData.data && dailyInsightsData.data.length > 0) {
+      dailyPerformance = dailyInsightsData.data.map((day: any) => {
+        // Extract purchase or lead actions
+        let dayResults = 0;
+        
+        if (day.actions) {
+          const purchaseActions = day.actions.find(
+            (action: any) => action.action_type === 'purchase' || action.action_type === 'offsite_conversion.fb_pixel_purchase'
+          );
+          
+          if (purchaseActions) {
+            dayResults = parseInt(purchaseActions.value || '0');
+          }
+          
+          // If no purchase actions found, look for leads
+          if (dayResults === 0) {
+            const leadActions = day.actions.find(
+              (action: any) => action.action_type === 'lead' || action.action_type === 'offsite_conversion.fb_pixel_lead'
+            );
+            
+            if (leadActions) {
+              dayResults = parseInt(leadActions.value || '0');
+            }
+          }
+        }
+        
+        const daySpend = parseFloat(day.spend || '0');
+        const dayRevenue = dayResults * 100; // Assuming $100 value per result
+        const dayRoas = daySpend > 0 ? dayRevenue / daySpend : 0;
+        
+        return {
+          date: day.date_start,
+          spend: daySpend,
+          revenue: dayRevenue,
+          roas: dayRoas,
+          impressions: parseInt(day.impressions || '0'),
+          clicks: parseInt(day.clicks || '0'),
+          conversions: dayResults
+        };
+      });
+    }
+    
     const responseData = {
       campaigns: processedCampaigns,
       insights: {
@@ -304,7 +399,8 @@ serve(async (req) => {
         totalResults,
         averageCPA,
         averageROI
-      }
+      },
+      dailyData: dailyPerformance
     };
 
     // Return the campaign data
