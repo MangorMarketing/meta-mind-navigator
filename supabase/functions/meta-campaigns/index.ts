@@ -173,20 +173,20 @@ serve(async (req) => {
         until: today.toISOString().split('T')[0]
       },
       'yesterday': {
-        since: new Date(today.setDate(today.getDate() - 1)).toISOString().split('T')[0],
-        until: new Date(today.setDate(today.getDate())).toISOString().split('T')[0]
+        since: new Date(today.getTime() - 86400000).toISOString().split('T')[0],
+        until: new Date(today.getTime()).toISOString().split('T')[0]
       },
       'last_7_days': {
-        since: new Date(today.setDate(today.getDate() - 7)).toISOString().split('T')[0],
-        until: new Date().toISOString().split('T')[0]
+        since: new Date(today.getTime() - 7 * 86400000).toISOString().split('T')[0],
+        until: today.toISOString().split('T')[0]
       },
       'last_30_days': {
-        since: new Date(today.setDate(today.getDate() - 30)).toISOString().split('T')[0],
-        until: new Date().toISOString().split('T')[0]
+        since: new Date(today.getTime() - 30 * 86400000).toISOString().split('T')[0],
+        until: today.toISOString().split('T')[0]
       },
       'last_90_days': {
-        since: new Date(today.setDate(today.getDate() - 90)).toISOString().split('T')[0],
-        until: new Date().toISOString().split('T')[0]
+        since: new Date(today.getTime() - 90 * 86400000).toISOString().split('T')[0],
+        until: today.toISOString().split('T')[0]
       }
     };
     
@@ -196,9 +196,7 @@ serve(async (req) => {
       until = dateRanges[timeRange].until;
     } else {
       // Default to last 30 days
-      const thirtyDaysAgo = new Date();
-      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-      since = thirtyDaysAgo.toISOString().split('T')[0];
+      since = new Date(today.getTime() - 30 * 86400000).toISOString().split('T')[0];
       until = today.toISOString().split('T')[0];
     }
     
@@ -206,7 +204,7 @@ serve(async (req) => {
     
     // Fetch campaigns for the ad account with time range
     const campaignsResponse = await fetch(
-      `https://graph.facebook.com/v18.0/${adAccountId}/campaigns?fields=name,status,objective,budget_remaining,spend,insights{ctr,impressions,reach,clicks,cpc,cpm,cost_per_conversion,conversions}&time_range={"since":"${since}","until":"${until}"}&access_token=${META_API_TOKEN}`,
+      `https://graph.facebook.com/v18.0/${adAccountId}/campaigns?fields=name,status,objective,budget_remaining,spend,insights{ctr,impressions,reach,clicks,cpc,cpm,cost_per_conversion,conversions,spend,actions}&time_range={"since":"${since}","until":"${until}"}&access_token=${META_API_TOKEN}`,
       { method: 'GET' }
     );
     
@@ -224,6 +222,7 @@ serve(async (req) => {
     }
     
     console.log(`Received ${campaignsData.data?.length || 0} campaigns from Meta API`);
+    console.log('Campaign data sample:', JSON.stringify(campaignsData.data?.[0] || {}));
     
     // If there are no campaigns, return an empty array with zero insights
     if (!campaignsData.data || campaignsData.data.length === 0) {
@@ -283,25 +282,36 @@ serve(async (req) => {
     const processedCampaigns = campaignsData.data.map((campaign: any) => {
       const insights = campaign.insights?.data?.[0] || {};
       let conversions = 0;
+      let spent = 0;
+      
+      // Parse spend (ensure it's not undefined or null)
+      if (campaign.spend) {
+        spent = parseFloat(campaign.spend);
+      } else if (insights.spend) {
+        spent = parseFloat(insights.spend);
+      }
       
       // Handle different conversion formats from the API
-      if (insights.conversions) {
-        if (Array.isArray(insights.conversions.actions)) {
-          conversions = insights.conversions.actions.reduce(
-            (sum: number, action: any) => sum + (parseInt(action.value) || 0), 0
+      if (insights.actions) {
+        // Find purchase actions
+        const purchaseActions = insights.actions.find(
+          (action: any) => action.action_type === 'purchase' || action.action_type === 'offsite_conversion.fb_pixel_purchase'
+        );
+        
+        if (purchaseActions) {
+          conversions = parseInt(purchaseActions.value || '0');
+        } else {
+          // Try to find lead actions if no purchases
+          const leadActions = insights.actions.find(
+            (action: any) => action.action_type === 'lead' || action.action_type === 'offsite_conversion.fb_pixel_lead'
           );
-        } else if (typeof insights.conversions === 'object') {
-          // Try to find purchase or lead conversions
-          const purchaseValue = insights.conversions['purchase'] || insights.conversions['offsite_conversion.fb_pixel_purchase'];
-          const leadValue = insights.conversions['lead'] || insights.conversions['offsite_conversion.fb_pixel_lead'];
           
-          if (purchaseValue) conversions = parseInt(purchaseValue);
-          else if (leadValue) conversions = parseInt(leadValue);
+          if (leadActions) {
+            conversions = parseInt(leadActions.value || '0');
+          }
         }
       }
       
-      // Parse spend (ensure it's not undefined or null)
-      const spent = parseFloat(campaign.spend || insights.spend || '0');
       const results = conversions;
       const ctr = parseFloat(insights.ctr || '0');
       const impressions = parseInt(insights.impressions || '0');
@@ -310,24 +320,24 @@ serve(async (req) => {
       const cpc = parseFloat(insights.cpc || '0');
       const cpm = parseFloat(insights.cpm || '0');
       const cpa = results > 0 ? spent / results : 0;
-      const roi = results > 0 ? (results * 100) / spent : 0; // 100 is the assumed value per conversion
+      const roi = spent > 0 ? (results * 100) / spent : 0; // 100 is the assumed value per conversion
       
       return {
         id: campaign.id,
         name: campaign.name,
         status: campaign.status,
         budget: parseFloat(campaign.budget_remaining || '0') + spent,
-        spent,
-        results,
-        cpa,
-        roi,
+        spent: spent,
+        results: results,
+        cpa: cpa,
+        roi: roi,
         objective: campaign.objective,
-        ctr,
-        impressions,
-        reach,
-        clicks,
-        cpc,
-        cpm
+        ctr: ctr,
+        impressions: impressions,
+        reach: reach,
+        clicks: clicks,
+        cpc: cpc,
+        cpm: cpm
       };
     });
     
@@ -403,7 +413,6 @@ serve(async (req) => {
       dailyData: dailyPerformance
     };
 
-    // Return the campaign data
     return new Response(
       JSON.stringify(responseData),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }

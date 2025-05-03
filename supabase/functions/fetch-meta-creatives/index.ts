@@ -68,16 +68,6 @@ function detectThemes(text: string): string[] {
   return detectedThemes;
 }
 
-// Parse date with fallback
-function parseDate(dateString: string | undefined): string {
-  if (!dateString) return new Date().toISOString();
-  try {
-    return new Date(dateString).toISOString();
-  } catch {
-    return new Date().toISOString();
-  }
-}
-
 serve(async (req) => {
   // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
@@ -106,6 +96,7 @@ serve(async (req) => {
     const { data: { user }, error: userError } = await supabaseClient.auth.getUser(token);
     
     if (userError || !user) {
+      console.error('Error authenticating user:', userError);
       return new Response(
         JSON.stringify({ error: 'Invalid token', details: userError }),
         { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -131,11 +122,15 @@ serve(async (req) => {
     
     // If no adAccountId provided, try to get it from meta_connections
     if (!adAccountId) {
-      const { data: connectionData } = await supabaseClient
+      const { data: connectionData, error: connectionError } = await supabaseClient
         .from('meta_connections')
         .select('ad_account_id')
         .eq('user_id', user.id)
         .single();
+      
+      if (connectionError) {
+        console.error('Error fetching meta connection:', connectionError);
+      }
         
       if (connectionData?.ad_account_id) {
         adAccountId = connectionData.ad_account_id;
@@ -143,6 +138,7 @@ serve(async (req) => {
     }
     
     if (!adAccountId) {
+      console.error('No ad account ID provided');
       return new Response(
         JSON.stringify({ 
           error: 'No ad account ID provided',
@@ -160,6 +156,7 @@ serve(async (req) => {
       .single();
       
     if (metaError || !metaConnection?.access_token) {
+      console.error('No Meta connection found:', metaError);
       return new Response(
         JSON.stringify({ 
           error: 'No Meta connection found',
@@ -174,6 +171,7 @@ serve(async (req) => {
     const tokenExpiresAt = metaConnection.token_expires_at ? new Date(metaConnection.token_expires_at) : null;
     
     if (tokenExpiresAt && now > tokenExpiresAt) {
+      console.error('Meta access token expired');
       return new Response(
         JSON.stringify({ 
           error: 'Meta access token expired',
@@ -221,224 +219,248 @@ serve(async (req) => {
     }
 
     console.log(`Fetching creatives for ad account ${adAccountId} from ${since} to ${until}`);
+    console.log(`Using Meta API token (first 10 chars): ${metaConnection.access_token.substring(0, 10)}...`);
 
     // Fetch ad creatives with insights
-    const creativeResponse = await fetch(
-      `https://graph.facebook.com/v18.0/${adAccountId}/adcreatives?fields=id,name,body,title,object_story_spec,thumbnail_url,effective_object_story_id&limit=50&access_token=${metaConnection.access_token}`,
-      { method: 'GET' }
-    );
+    try {
+      const creativeResponse = await fetch(
+        `https://graph.facebook.com/v18.0/${adAccountId}/adcreatives?fields=id,name,body,title,object_story_spec,thumbnail_url,effective_object_story_id&limit=50&access_token=${metaConnection.access_token}`,
+        { method: 'GET' }
+      );
 
-    const creativeData = await creativeResponse.json();
-    
-    if (creativeData.error) {
-      console.error('Error fetching creative data:', creativeData.error);
-      return new Response(
-        JSON.stringify({ 
-          error: 'Failed to fetch creative data', 
-          details: creativeData.error 
-        }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
-    
-    // Fetch ads to get performance metrics and link to creatives
-    const adsResponse = await fetch(
-      `https://graph.facebook.com/v18.0/${adAccountId}/ads?fields=id,name,creative{id},adset{name},status,effective_status,insights{impressions,clicks,ctr,cpc,spend,actions,conversion_values}&time_range={"since":"${since}","until":"${until}"}&limit=100&access_token=${metaConnection.access_token}`,
-      { method: 'GET' }
-    );
-    
-    const adsData = await adsResponse.json();
-    
-    if (adsData.error) {
-      console.error('Error fetching ads data:', adsData.error);
-      return new Response(
-        JSON.stringify({ 
-          error: 'Failed to fetch ads data', 
-          details: adsData.error 
-        }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
-    
-    // Process creatives and link with performance data
-    const processedCreatives = [];
-    
-    if (creativeData.data && adsData.data) {
-      // Map ads by creative ID for quick lookup
-      const adsByCreativeId = new Map();
+      const creativeData = await creativeResponse.json();
       
-      adsData.data.forEach((ad: any) => {
-        if (ad.creative && ad.creative.id) {
-          if (!adsByCreativeId.has(ad.creative.id)) {
-            adsByCreativeId.set(ad.creative.id, []);
-          }
-          adsByCreativeId.get(ad.creative.id).push(ad);
-        }
-      });
+      if (creativeData.error) {
+        console.error('Error fetching creative data:', creativeData.error);
+        return new Response(
+          JSON.stringify({ 
+            error: 'Failed to fetch creative data', 
+            details: creativeData.error 
+          }),
+          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
       
-      // Process each creative with performance data from linked ads
-      for (const creative of creativeData.data) {
-        const linkedAds = adsByCreativeId.get(creative.id) || [];
+      console.log(`Fetched ${creativeData.data?.length || 0} creatives from Meta API`);
+      
+      // Fetch ads to get performance metrics and link to creatives
+      const adsResponse = await fetch(
+        `https://graph.facebook.com/v18.0/${adAccountId}/ads?fields=id,name,creative{id},adset{name,start_time,end_time},status,effective_status,insights{impressions,clicks,ctr,cpc,spend,actions,conversion_values}&time_range={"since":"${since}","until":"${until}"}&limit=100&access_token=${metaConnection.access_token}`,
+        { method: 'GET' }
+      );
+      
+      const adsData = await adsResponse.json();
+      
+      if (adsData.error) {
+        console.error('Error fetching ads data:', adsData.error);
+        return new Response(
+          JSON.stringify({ 
+            error: 'Failed to fetch ads data', 
+            details: adsData.error 
+          }),
+          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+      
+      console.log(`Fetched ${adsData.data?.length || 0} ads from Meta API`);
+      
+      // Process creatives and link with performance data
+      const processedCreatives = [];
+      
+      if (creativeData.data && adsData.data) {
+        // Map ads by creative ID for quick lookup
+        const adsByCreativeId = new Map();
         
-        if (linkedAds.length === 0) continue; // Skip creatives without linked ads
-        
-        // Extract text content for theme detection
-        const text = [
-          creative.name,
-          creative.title,
-          creative.body,
-          creative.object_story_spec?.link_data?.message,
-          creative.object_story_spec?.link_data?.description,
-          creative.object_story_spec?.photo_data?.message,
-          creative.object_story_spec?.video_data?.message
-        ].filter(Boolean).join(' ');
-        
-        // Detect themes from the creative content
-        const detectedThemes = detectThemes(text);
-        const themes = detectedThemes.length > 0 ? detectedThemes : ["Other"];
-        
-        // Aggregate performance metrics across all ads using this creative
-        let totalImpressions = 0;
-        let totalClicks = 0;
-        let totalSpend = 0;
-        let totalConversions = 0;
-        let totalRevenue = 0;
-        
-        // Determine creative type and URL
-        const isVideo = !!creative.object_story_spec?.video_data;
-        let thumbnailUrl = creative.thumbnail_url || "";
-        let url = "";
-        
-        // Get creative URL and thumbnail
-        if (creative.object_story_spec) {
-          if (isVideo) {
-            url = creative.object_story_spec?.video_data?.video_url || "";
-            thumbnailUrl = creative.object_story_spec?.video_data?.thumbnail_url || thumbnailUrl;
-          } else if (creative.object_story_spec?.link_data) {
-            url = creative.object_story_spec.link_data.link || "";
-            thumbnailUrl = creative.object_story_spec.link_data.picture || thumbnailUrl;
-          } else if (creative.object_story_spec?.photo_data) {
-            url = creative.object_story_spec.photo_data.url || "";
-            thumbnailUrl = creative.object_story_spec.photo_data.url || thumbnailUrl;
+        adsData.data.forEach((ad: any) => {
+          if (ad.creative && ad.creative.id) {
+            if (!adsByCreativeId.has(ad.creative.id)) {
+              adsByCreativeId.set(ad.creative.id, []);
+            }
+            adsByCreativeId.get(ad.creative.id).push(ad);
           }
-        }
+        });
         
-        // If no thumbnail found, use a placeholder
-        if (!thumbnailUrl) {
-          thumbnailUrl = "https://source.unsplash.com/random/800x600?ad";
-        }
+        console.log(`Linked ${adsByCreativeId.size} creatives with ads`);
         
-        // Determine status based on linked ads
-        const allStatuses = linkedAds.map((ad: any) => ad.effective_status || ad.status);
-        let status: "active" | "paused" | "archived" = "archived";
-        
-        if (allStatuses.some(s => s === "ACTIVE")) {
-          status = "active";
-        } else if (allStatuses.some(s => s === "PAUSED")) {
-          status = "paused";
-        }
-        
-        // Collect performance data from all ads using this creative
-        linkedAds.forEach((ad: any) => {
-          if (ad.insights && ad.insights.data && ad.insights.data.length > 0) {
-            const insight = ad.insights.data[0];
-            
-            totalImpressions += parseInt(insight.impressions || '0');
-            totalClicks += parseInt(insight.clicks || '0');
-            totalSpend += parseFloat(insight.spend || '0');
-            
-            // Parse conversions from actions
-            if (insight.actions) {
-              const purchaseActions = insight.actions.find(
-                (action: any) => action.action_type === 'purchase' || 
-                                action.action_type === 'offsite_conversion.fb_pixel_purchase'
-              );
+        // Process each creative with performance data from linked ads
+        for (const creative of creativeData.data) {
+          const linkedAds = adsByCreativeId.get(creative.id) || [];
+          
+          if (linkedAds.length === 0) {
+            console.log(`No linked ads found for creative: ${creative.id}`);
+            continue; // Skip creatives without linked ads
+          }
+          
+          // Extract text content for theme detection
+          const text = [
+            creative.name,
+            creative.title,
+            creative.body,
+            creative.object_story_spec?.link_data?.message,
+            creative.object_story_spec?.link_data?.description,
+            creative.object_story_spec?.photo_data?.message,
+            creative.object_story_spec?.video_data?.message
+          ].filter(Boolean).join(' ');
+          
+          // Detect themes from the creative content
+          const detectedThemes = detectThemes(text);
+          const themes = detectedThemes.length > 0 ? detectedThemes : ["Other"];
+          
+          // Aggregate performance metrics across all ads using this creative
+          let totalImpressions = 0;
+          let totalClicks = 0;
+          let totalSpend = 0;
+          let totalConversions = 0;
+          let totalRevenue = 0;
+          
+          // Determine creative type and URL
+          const isVideo = !!creative.object_story_spec?.video_data;
+          let thumbnailUrl = creative.thumbnail_url || "";
+          let url = "";
+          
+          // Get creative URL and thumbnail
+          if (creative.object_story_spec) {
+            if (isVideo) {
+              url = creative.object_story_spec?.video_data?.video_url || "";
+              thumbnailUrl = creative.object_story_spec?.video_data?.thumbnail_url || thumbnailUrl;
+            } else if (creative.object_story_spec?.link_data) {
+              url = creative.object_story_spec.link_data.link || "";
+              thumbnailUrl = creative.object_story_spec.link_data.picture || thumbnailUrl;
+            } else if (creative.object_story_spec?.photo_data) {
+              url = creative.object_story_spec.photo_data.url || "";
+              thumbnailUrl = creative.object_story_spec.photo_data.url || thumbnailUrl;
+            }
+          }
+          
+          // If no thumbnail found, use a placeholder
+          if (!thumbnailUrl) {
+            thumbnailUrl = "https://source.unsplash.com/random/800x600?ad";
+          }
+          
+          // Determine status based on linked ads
+          const allStatuses = linkedAds.map((ad: any) => ad.effective_status || ad.status);
+          let status: "active" | "paused" | "archived" = "archived";
+          
+          if (allStatuses.some(s => s === "ACTIVE")) {
+            status = "active";
+          } else if (allStatuses.some(s => s === "PAUSED")) {
+            status = "paused";
+          }
+          
+          // Collect performance data from all ads using this creative
+          linkedAds.forEach((ad: any) => {
+            if (ad.insights && ad.insights.data && ad.insights.data.length > 0) {
+              const insight = ad.insights.data[0];
               
-              if (purchaseActions) {
-                totalConversions += parseInt(purchaseActions.value || '0');
-              } else {
-                // Look for leads if no purchases
-                const leadActions = insight.actions.find(
-                  (action: any) => action.action_type === 'lead' || 
-                                  action.action_type === 'offsite_conversion.fb_pixel_lead'
+              totalImpressions += parseInt(insight.impressions || '0');
+              totalClicks += parseInt(insight.clicks || '0');
+              totalSpend += parseFloat(insight.spend || '0');
+              
+              // Parse conversions from actions
+              if (insight.actions) {
+                const purchaseActions = insight.actions.find(
+                  (action: any) => action.action_type === 'purchase' || 
+                                  action.action_type === 'offsite_conversion.fb_pixel_purchase'
                 );
                 
-                if (leadActions) {
-                  totalConversions += parseInt(leadActions.value || '0');
+                if (purchaseActions) {
+                  totalConversions += parseInt(purchaseActions.value || '0');
+                } else {
+                  // Look for leads if no purchases
+                  const leadActions = insight.actions.find(
+                    (action: any) => action.action_type === 'lead' || 
+                                    action.action_type === 'offsite_conversion.fb_pixel_lead'
+                  );
+                  
+                  if (leadActions) {
+                    totalConversions += parseInt(leadActions.value || '0');
+                  }
+                }
+              }
+              
+              // Parse revenue from conversion_values
+              if (insight.conversion_values) {
+                const conversionValue = insight.conversion_values.find(
+                  (value: any) => value.action_type === 'offsite_conversion.fb_pixel_purchase'
+                );
+                
+                if (conversionValue) {
+                  totalRevenue += parseFloat(conversionValue.value || '0');
                 }
               }
             }
+          });
+          
+          // Calculate performance metrics
+          const ctr = totalImpressions > 0 ? totalClicks / totalImpressions : 0;
+          const revenue = totalRevenue > 0 ? totalRevenue : totalConversions * 100; // Assume $100 per conversion if no revenue data
+          const roas = totalSpend > 0 ? revenue / totalSpend : 0;
+          const performance = roas > 0 ? roas : (ctr > 0.05 ? ctr * 20 : 0.8); // Use ROAS or CTR-based score
+          
+          // Determine date range for the creative from ads
+          let startDate = new Date();
+          let endDate = new Date();
+          
+          // Extract min start date and max end date
+          linkedAds.forEach((ad: any) => {
+            const adsetStartTime = ad.adset?.start_time;
+            const adsetEndTime = ad.adset?.end_time;
             
-            // Parse revenue from conversion_values
-            if (insight.conversion_values) {
-              const conversionValue = insight.conversion_values.find(
-                (value: any) => value.action_type === 'offsite_conversion.fb_pixel_purchase'
-              );
-              
-              if (conversionValue) {
-                totalRevenue += parseFloat(conversionValue.value || '0');
+            if (adsetStartTime) {
+              const adStartDate = new Date(adsetStartTime);
+              if (adStartDate < startDate) {
+                startDate = adStartDate;
               }
             }
-          }
-        });
-        
-        // Calculate performance metrics
-        const ctr = totalImpressions > 0 ? totalClicks / totalImpressions : 0;
-        const revenue = totalRevenue > 0 ? totalRevenue : totalConversions * 100; // Assume $100 per conversion if no revenue data
-        const roas = totalSpend > 0 ? revenue / totalSpend : 0;
-        const performance = roas > 0 ? roas : (ctr > 0.05 ? ctr * 20 : 0.8); // Use ROAS or CTR-based score
-        
-        // Determine date range for the creative from ads
-        let startDate = new Date();
-        let endDate = new Date();
-        
-        // Extract min start date and max end date
-        linkedAds.forEach((ad: any) => {
-          const adsetStartTime = ad.adset?.start_time;
-          const adsetEndTime = ad.adset?.end_time;
-          
-          if (adsetStartTime) {
-            const adStartDate = new Date(adsetStartTime);
-            if (adStartDate < startDate) {
-              startDate = adStartDate;
+            
+            if (adsetEndTime) {
+              const adEndDate = new Date(adsetEndTime);
+              if (adEndDate > endDate) {
+                endDate = adEndDate;
+              }
             }
-          }
+          });
           
-          if (adsetEndTime) {
-            const adEndDate = new Date(adsetEndTime);
-            if (adEndDate > endDate) {
-              endDate = adEndDate;
-            }
-          }
-        });
-        
-        // Add the processed creative
-        processedCreatives.push({
-          id: creative.id,
-          name: creative.name,
-          type: isVideo ? "video" : "image",
-          url: url,
-          thumbnailUrl: thumbnailUrl,
-          performance: Math.round(performance * 100) / 100,
-          impressions: totalImpressions,
-          clicks: totalClicks,
-          ctr: ctr,
-          conversions: totalConversions,
-          spend: totalSpend,
-          revenue: revenue,
-          roas: roas,
-          startDate: startDate.toISOString(),
-          endDate: endDate.toISOString(),
-          themes: themes,
-          status: status
-        });
+          // Add the processed creative
+          processedCreatives.push({
+            id: creative.id,
+            name: creative.name,
+            type: isVideo ? "video" : "image",
+            url: url,
+            thumbnailUrl: thumbnailUrl,
+            performance: Math.round(performance * 100) / 100,
+            impressions: totalImpressions,
+            clicks: totalClicks,
+            ctr: ctr,
+            conversions: totalConversions,
+            spend: totalSpend,
+            revenue: revenue,
+            roas: roas,
+            startDate: startDate.toISOString(),
+            endDate: endDate.toISOString(),
+            themes: themes,
+            status: status,
+            aiInsightsCount: Math.floor(Math.random() * 5) + 1 // Adding random AI insights count for demo
+          });
+        }
       }
+      
+      console.log(`Processed ${processedCreatives.length} creatives`);
+      
+      return new Response(
+        JSON.stringify({ creatives: processedCreatives }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    } catch (fetchError) {
+      console.error('Error fetching from Meta API:', fetchError);
+      return new Response(
+        JSON.stringify({ 
+          error: 'Failed to fetch data from Meta API', 
+          details: fetchError.message 
+        }),
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
     }
-    
-    return new Response(
-      JSON.stringify({ creatives: processedCreatives }),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    );
   } catch (error) {
     console.error('Error in fetch-meta-creatives function:', error);
     return new Response(

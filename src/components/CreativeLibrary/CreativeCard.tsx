@@ -84,8 +84,8 @@ export function CreativeCard({ creative, onClick }: CreativeCardProps) {
         </div>
         
         <div className="flex flex-wrap gap-1 mb-3">
-          {creative.themes.slice(0, 2).map((theme) => (
-            <Badge key={theme} variant="secondary" className="text-xs">
+          {creative.themes.slice(0, 2).map((theme, index) => (
+            <Badge key={`${theme}-${index}`} variant="secondary" className="text-xs">
               {theme}
             </Badge>
           ))}
