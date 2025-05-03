@@ -38,7 +38,13 @@ interface MetaApiResponse {
   insights: MetaInsights;
 }
 
+interface MetaConnection {
+  id: string;
+  ad_account_id: string;
+}
+
 export default function Index() {
+  // State for data and loading
   const [dailyData, setDailyData] = useState<DailyPerformance[]>(() => generateDailyData());
   const [creativeThemes, setCreativeThemes] = useState(() => generateCreativeThemes());
   const [aiInsights, setAIInsights] = useState(() => generateAIInsights());
@@ -50,14 +56,25 @@ export default function Index() {
     ctr: 0,
     conversions: 0
   });
+
+  // State for Meta connection and ad accounts
   const [isLoading, setIsLoading] = useState(true);
   const [apiError, setApiError] = useState<string | null>(null);
   const [isMetaConnected, setIsMetaConnected] = useState(false);
+  const [currentAdAccountId, setCurrentAdAccountId] = useState<string | null>(null);
   const { user } = useAuth();
   const { toast } = useToast();
   
+  useEffect(() => {
+    if (user) {
+      checkMetaConnection();
+    } else {
+      setIsLoading(false);
+    }
+  }, [user]);
+  
   const checkMetaConnection = async () => {
-    if (!user) return false;
+    if (!user) return;
     
     try {
       const { data, error } = await supabase
@@ -68,22 +85,34 @@ export default function Index() {
         
       if (error) {
         console.error('Error checking Meta connection:', error);
-        return false;
+        setIsMetaConnected(false);
+        setIsLoading(false);
+        return;
       }
       
-      return !!data;
+      if (data) {
+        setIsMetaConnected(true);
+        setCurrentAdAccountId(data.ad_account_id);
+        fetchMetaCampaigns(data.ad_account_id);
+      } else {
+        setIsMetaConnected(false);
+        setIsLoading(false);
+      }
     } catch (error) {
       console.error('Error in checkMetaConnection:', error);
-      return false;
+      setIsLoading(false);
     }
   };
   
-  const fetchMetaCampaigns = async () => {
+  const fetchMetaCampaigns = async (adAccountId?: string) => {
     setIsLoading(true);
     setApiError(null);
     
     try {
-      const { data, error } = await supabase.functions.invoke('meta-campaigns');
+      // Pass the specific adAccountId if provided
+      const { data, error } = await supabase.functions.invoke('meta-campaigns', {
+        body: adAccountId ? { adAccountId } : undefined
+      });
       
       if (error) {
         console.error('Error fetching Meta campaigns:', error);
@@ -99,6 +128,7 @@ export default function Index() {
       
       if (data) {
         const metaData = data as MetaApiResponse;
+        console.log('Fetched Meta data:', metaData);
         setCampaigns(metaData.campaigns);
         
         // Update key metrics from real data
@@ -124,28 +154,44 @@ export default function Index() {
     }
   };
   
-  useEffect(() => {
-    const initializeDashboard = async () => {
-      if (user) {
-        const metaConnected = await checkMetaConnection();
-        setIsMetaConnected(metaConnected);
-        
-        if (metaConnected) {
-          fetchMetaCampaigns();
-        } else {
-          setIsLoading(false);
-        }
-      } else {
-        setIsLoading(false);
-      }
-    };
+  const handleAdAccountChange = async (adAccountId: string) => {
+    setCurrentAdAccountId(adAccountId);
     
-    initializeDashboard();
-  }, [user]);
+    // Update the user's default ad account in Supabase
+    try {
+      const { error } = await supabase.functions.invoke('update-ad-account', {
+        body: { adAccountId }
+      });
+      
+      if (error) {
+        toast({
+          title: "Error",
+          description: "Failed to update ad account. Please try again.",
+          variant: "destructive",
+        });
+        return;
+      }
+      
+      // Fetch data for the new ad account
+      fetchMetaCampaigns(adAccountId);
+      
+      toast({
+        title: "Ad Account Updated",
+        description: "Dashboard data updated for the selected ad account."
+      });
+    } catch (error) {
+      console.error('Error updating ad account:', error);
+      toast({
+        title: "Error",
+        description: "Failed to update ad account. Please try again.",
+        variant: "destructive",
+      });
+    }
+  };
   
   const handleRefreshData = () => {
     if (isMetaConnected) {
-      fetchMetaCampaigns();
+      fetchMetaCampaigns(currentAdAccountId || undefined);
     } else {
       toast({
         title: "Meta Account Not Connected",
@@ -158,7 +204,12 @@ export default function Index() {
   return (
     <AppLayout>
       <div className="page-transition">
-        <DashboardHeader title="Meta Ads Performance Dashboard" onRefresh={handleRefreshData} />
+        <DashboardHeader 
+          title="Meta Ads Performance Dashboard" 
+          onRefresh={handleRefreshData}
+          currentAdAccountId={currentAdAccountId}
+          onAdAccountChange={handleAdAccountChange}
+        />
         
         {!isMetaConnected ? (
           <div className="mb-6">

@@ -43,6 +43,19 @@ serve(async (req) => {
       );
     }
 
+    // Check if a specific ad account ID was requested
+    let specificAdAccountId: string | undefined;
+    
+    // Parse request body for adAccountId if present
+    if (req.headers.get('content-type')?.includes('application/json')) {
+      try {
+        const requestBody = await req.json();
+        specificAdAccountId = requestBody.adAccountId;
+      } catch (e) {
+        console.log('No request body or invalid JSON');
+      }
+    }
+    
     // Get the user's Meta connection
     const { data: metaConnection, error: metaError } = await supabaseClient
       .from('meta_connections')
@@ -89,9 +102,10 @@ serve(async (req) => {
       );
     }
     
-    // If we don't have a specific ad account ID yet, we can query for the user's ad accounts
-    let adAccountId = metaConnection.ad_account_id;
+    // Use the specific ad account ID if provided, otherwise use the one from meta_connection
+    const adAccountId = specificAdAccountId || metaConnection.ad_account_id;
     
+    // If we still don't have an ad account ID, try to fetch one
     if (!adAccountId) {
       console.log('No ad account ID found, fetching ad accounts');
       // Get list of ad accounts the user has access to
@@ -115,14 +129,16 @@ serve(async (req) => {
       
       // Use the first ad account if available
       if (adAccountsData.data && adAccountsData.data.length > 0) {
-        adAccountId = adAccountsData.data[0].id;
-        console.log('Found ad account ID:', adAccountId);
+        const firstAdAccountId = adAccountsData.data[0].id;
+        console.log('Found ad account ID:', firstAdAccountId);
         
-        // Update the user's meta_connection with this ad account ID
-        await supabaseClient
-          .from('meta_connections')
-          .update({ ad_account_id: adAccountId })
-          .eq('id', metaConnection.id);
+        // Update the user's meta_connection with this ad account ID if not using a temporary one
+        if (!specificAdAccountId) {
+          await supabaseClient
+            .from('meta_connections')
+            .update({ ad_account_id: firstAdAccountId })
+            .eq('id', metaConnection.id);
+        }
       } else {
         console.log('No ad accounts found');
         return new Response(
@@ -137,9 +153,17 @@ serve(async (req) => {
 
     console.log('Fetching campaigns for ad account:', adAccountId);
     
-    // Fetch campaigns for the ad account
+    // Use date parameters from Meta API for proper time range
+    const today = new Date();
+    const thirtyDaysAgo = new Date(today);
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+    
+    const since = thirtyDaysAgo.toISOString().split('T')[0];
+    const until = today.toISOString().split('T')[0];
+    
+    // Fetch campaigns for the ad account with time range
     const campaignsResponse = await fetch(
-      `https://graph.facebook.com/v18.0/${adAccountId}/campaigns?fields=name,status,objective,budget_remaining,spend,insights{ctr,impressions,reach,clicks,cpc,cpm,cost_per_conversion,conversions}&access_token=${META_API_TOKEN}`,
+      `https://graph.facebook.com/v18.0/${adAccountId}/campaigns?fields=name,status,objective,budget_remaining,spend,insights{ctr,impressions,reach,clicks,cpc,cpm,cost_per_conversion,conversions}&time_range={"since":"${since}","until":"${until}"}&access_token=${META_API_TOKEN}`,
       { method: 'GET' }
     );
     
@@ -174,50 +198,102 @@ serve(async (req) => {
       );
     }
     
+    // Get summary insights for the account level directly from the Insights API
+    const accountInsightsResponse = await fetch(
+      `https://graph.facebook.com/v18.0/${adAccountId}/insights?fields=spend,actions,impressions,reach,clicks,ctr,cpc,cpm&time_range={"since":"${since}","until":"${until}"}&access_token=${META_API_TOKEN}`,
+      { method: 'GET' }
+    );
+    
+    const accountInsightsData = await accountInsightsResponse.json();
+    let accountLevelSpend = 0;
+    let accountLevelResults = 0;
+    
+    // Parse account level metrics if available
+    if (!accountInsightsData.error && accountInsightsData.data && accountInsightsData.data.length > 0) {
+      accountLevelSpend = parseFloat(accountInsightsData.data[0].spend || '0');
+      
+      // Parse conversions from actions array if it exists
+      if (accountInsightsData.data[0].actions) {
+        const purchaseActions = accountInsightsData.data[0].actions.find(
+          (action: any) => action.action_type === 'purchase' || action.action_type === 'offsite_conversion.fb_pixel_purchase'
+        );
+        
+        if (purchaseActions) {
+          accountLevelResults = parseInt(purchaseActions.value || '0');
+        }
+        
+        // If no purchase actions found, look for leads instead
+        if (accountLevelResults === 0) {
+          const leadActions = accountInsightsData.data[0].actions.find(
+            (action: any) => action.action_type === 'lead' || action.action_type === 'offsite_conversion.fb_pixel_lead'
+          );
+          
+          if (leadActions) {
+            accountLevelResults = parseInt(leadActions.value || '0');
+          }
+        }
+      }
+    }
+    
     // Transform the campaign data to match our expected format
-    const processedCampaigns = campaignsData.data.map(campaign => {
+    const processedCampaigns = campaignsData.data.map((campaign: any) => {
       const insights = campaign.insights?.data?.[0] || {};
-      const conversionsValue = insights.conversions || 0;
       let conversions = 0;
       
       // Handle different conversion formats from the API
-      if (typeof conversionsValue === 'object') {
-        // If it's an object with actions, sum them up
-        if (Array.isArray(conversionsValue.actions)) {
-          conversions = conversionsValue.actions.reduce((sum, action) => sum + (parseInt(action.value) || 0), 0);
-        } else {
-          // If it's some other format, try to get a number or default to 0
-          conversions = parseInt(conversionsValue.toString()) || 0;
+      if (insights.conversions) {
+        if (Array.isArray(insights.conversions.actions)) {
+          conversions = insights.conversions.actions.reduce(
+            (sum: number, action: any) => sum + (parseInt(action.value) || 0), 0
+          );
+        } else if (typeof insights.conversions === 'object') {
+          // Try to find purchase or lead conversions
+          const purchaseValue = insights.conversions['purchase'] || insights.conversions['offsite_conversion.fb_pixel_purchase'];
+          const leadValue = insights.conversions['lead'] || insights.conversions['offsite_conversion.fb_pixel_lead'];
+          
+          if (purchaseValue) conversions = parseInt(purchaseValue);
+          else if (leadValue) conversions = parseInt(leadValue);
         }
-      } else {
-        conversions = parseInt(conversionsValue.toString()) || 0;
       }
       
-      const spent = parseFloat(campaign.spend || '0');
+      // Parse spend (ensure it's not undefined or null)
+      const spent = parseFloat(campaign.spend || insights.spend || '0');
       const results = conversions;
+      const ctr = parseFloat(insights.ctr || '0');
+      const impressions = parseInt(insights.impressions || '0');
+      const reach = parseInt(insights.reach || '0');
+      const clicks = parseInt(insights.clicks || '0');
+      const cpc = parseFloat(insights.cpc || '0');
+      const cpm = parseFloat(insights.cpm || '0');
+      const cpa = results > 0 ? spent / results : 0;
+      const roi = results > 0 ? (results * 100) / spent : 0;
       
       return {
         id: campaign.id,
         name: campaign.name,
         status: campaign.status,
-        budget: parseFloat(campaign.budget_remaining || '0') + spent, // Approximate total budget
-        spent: spent,
-        results: results,
-        cpa: results > 0 ? spent / results : 0,
-        roi: results > 0 ? (results * 100) / spent : 0, // Assuming $100 value per conversion
+        budget: parseFloat(campaign.budget_remaining || '0') + spent,
+        spent,
+        results,
+        cpa,
+        roi,
         objective: campaign.objective,
-        ctr: parseFloat(insights.ctr || '0'),
-        impressions: parseInt(insights.impressions || '0'),
-        reach: parseInt(insights.reach || '0'),
-        clicks: parseInt(insights.clicks || '0'),
-        cpc: parseFloat(insights.cpc || '0'),
-        cpm: parseFloat(insights.cpm || '0')
+        ctr,
+        impressions,
+        reach,
+        clicks,
+        cpc,
+        cpm
       };
     });
     
-    // Calculate aggregate insights
-    const totalSpent = processedCampaigns.reduce((sum, campaign) => sum + campaign.spent, 0);
-    const totalResults = processedCampaigns.reduce((sum, campaign) => sum + campaign.results, 0);
+    // Calculate aggregate insights from the processed campaigns
+    const totalSpent = accountLevelSpend > 0 ? accountLevelSpend : 
+      processedCampaigns.reduce((sum, campaign) => sum + campaign.spent, 0);
+      
+    const totalResults = accountLevelResults > 0 ? accountLevelResults :
+      processedCampaigns.reduce((sum, campaign) => sum + campaign.results, 0);
+      
     const averageCPA = totalResults > 0 ? totalSpent / totalResults : 0;
     const averageROI = totalSpent > 0 ? (totalResults * 100) / totalSpent : 0;
     
