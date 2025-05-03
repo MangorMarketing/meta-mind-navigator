@@ -8,3 +8,9 @@ verify_jwt = true
 verify_jwt = true
 [functions.complete-meta-connection]
 verify_jwt = true
+[functions.fetch-ad-accounts]
+verify_jwt = true
+[functions.update-ad-account]
+verify_jwt = true
+[functions.disconnect-meta-account]
+verify_jwt = true

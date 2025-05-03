@@ -53,7 +53,6 @@ export default function Index() {
   const [isLoading, setIsLoading] = useState(true);
   const [apiError, setApiError] = useState<string | null>(null);
   const [isMetaConnected, setIsMetaConnected] = useState(false);
-  const [isCheckingConnection, setIsCheckingConnection] = useState(true);
   const { user } = useAuth();
   const { toast } = useToast();
   
@@ -62,9 +61,9 @@ export default function Index() {
     
     try {
       const { data, error } = await supabase
-        .from('profiles')
-        .select('meta_connected')
-        .eq('id', user.id)
+        .from('meta_connections')
+        .select('id, ad_account_id')
+        .eq('user_id', user.id)
         .single();
         
       if (error) {
@@ -72,7 +71,7 @@ export default function Index() {
         return false;
       }
       
-      return data?.meta_connected || false;
+      return !!data;
     } catch (error) {
       console.error('Error in checkMetaConnection:', error);
       return false;
@@ -128,17 +127,15 @@ export default function Index() {
   useEffect(() => {
     const initializeDashboard = async () => {
       if (user) {
-        setIsCheckingConnection(true);
         const metaConnected = await checkMetaConnection();
         setIsMetaConnected(metaConnected);
         
         if (metaConnected) {
           fetchMetaCampaigns();
+        } else {
+          setIsLoading(false);
         }
-        setIsCheckingConnection(false);
-        setIsLoading(false);
       } else {
-        setIsCheckingConnection(false);
         setIsLoading(false);
       }
     };
@@ -158,105 +155,88 @@ export default function Index() {
     }
   };
   
-  const handleMetaConnectSuccess = () => {
-    setIsMetaConnected(true);
-    fetchMetaCampaigns();
-    toast({
-      title: "Success",
-      description: "Your Meta account has been connected.",
-    });
-  };
-  
   return (
     <AppLayout>
       <div className="page-transition">
         <DashboardHeader title="Meta Ads Performance Dashboard" onRefresh={handleRefreshData} />
         
-        {isCheckingConnection ? (
-          <div className="flex justify-center p-12">
-            <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
+        {!isMetaConnected ? (
+          <div className="mb-6">
+            <MetaConnect />
           </div>
         ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
+            <StatCard
+              title="Total Spend"
+              value={keyMetrics.totalSpend}
+              format="currency"
+              trend={8.2}
+              icon={<DollarSign className="h-4 w-4" />}
+            />
+            
+            <StatCard
+              title="Total Revenue"
+              value={keyMetrics.totalRevenue}
+              format="currency"
+              trend={12.5}
+              icon={<TrendingUp className="h-4 w-4" />}
+            />
+            
+            <StatCard
+              title="ROAS"
+              value={keyMetrics.roas}
+              trend={4.3}
+              icon={<BarChart4 className="h-4 w-4" />}
+            />
+            
+            <StatCard
+              title="CTR"
+              value={keyMetrics.ctr}
+              format="percentage"
+              trend={-1.8}
+              invertTrend={true}
+              icon={<MousePointer className="h-4 w-4" />}
+            />
+            
+            <StatCard
+              title="Conversions"
+              value={keyMetrics.conversions}
+              trend={5.7}
+              icon={<ShoppingCart className="h-4 w-4" />}
+            />
+          </div>
+        )}
+        
+        {apiError && (
+          <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-6">
+            <p>{apiError}</p>
+            <p className="text-sm mt-1">
+              {!isMetaConnected 
+                ? "You need to connect your Meta account first." 
+                : "Check your API credentials or try again later."}
+            </p>
+          </div>
+        )}
+        
+        {isMetaConnected && (
           <>
-            {!isMetaConnected ? (
-              <div className="mb-6">
-                <MetaConnect onSuccess={handleMetaConnectSuccess} />
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
-                <StatCard
-                  title="Total Spend"
-                  value={keyMetrics.totalSpend}
-                  format="currency"
-                  trend={8.2}
-                  icon={<DollarSign className="h-4 w-4" />}
-                />
-                
-                <StatCard
-                  title="Total Revenue"
-                  value={keyMetrics.totalRevenue}
-                  format="currency"
-                  trend={12.5}
-                  icon={<TrendingUp className="h-4 w-4" />}
-                />
-                
-                <StatCard
-                  title="ROAS"
-                  value={keyMetrics.roas}
-                  trend={4.3}
-                  icon={<BarChart4 className="h-4 w-4" />}
-                />
-                
-                <StatCard
-                  title="CTR"
-                  value={keyMetrics.ctr}
-                  format="percentage"
-                  trend={-1.8}
-                  invertTrend={true}
-                  icon={<MousePointer className="h-4 w-4" />}
-                />
-                
-                <StatCard
-                  title="Conversions"
-                  value={keyMetrics.conversions}
-                  trend={5.7}
-                  icon={<ShoppingCart className="h-4 w-4" />}
-                />
-              </div>
-            )}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+              <PerformanceChart 
+                data={dailyData} 
+                title="Performance Over Time"
+                className="lg:col-span-2"
+              />
+              <ThemeExplorer themes={creativeThemes} />
+            </div>
             
-            {apiError && (
-              <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-6">
-                <p>{apiError}</p>
-                <p className="text-sm mt-1">
-                  {!isMetaConnected 
-                    ? "You need to connect your Meta account first." 
-                    : "Check your API credentials or try again later."}
-                </p>
-              </div>
-            )}
-            
-            {isMetaConnected && (
-              <>
-                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
-                  <PerformanceChart 
-                    data={dailyData} 
-                    title="Performance Over Time"
-                    className="lg:col-span-2"
-                  />
-                  <ThemeExplorer themes={creativeThemes} />
-                </div>
-                
-                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
-                  <CampaignsTable 
-                    campaigns={campaigns} 
-                    className="lg:col-span-2" 
-                    isLoading={isLoading}
-                  />
-                  <InsightsFeed insights={aiInsights} />
-                </div>
-              </>
-            )}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+              <CampaignsTable 
+                campaigns={campaigns} 
+                className="lg:col-span-2" 
+                isLoading={isLoading}
+              />
+              <InsightsFeed insights={aiInsights} />
+            </div>
           </>
         )}
       </div>

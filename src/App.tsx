@@ -12,6 +12,7 @@ import CreativeLibrary from "./pages/CreativeLibrary";
 import CampaignAnalytics from "./pages/CampaignAnalytics";
 import AIInsights from "./pages/AIInsights";
 import Auth from "./pages/Auth";
+import Settings from "./pages/Settings";
 import MetaCallback from "./pages/MetaCallback";
 
 const queryClient = new QueryClient();
@@ -55,6 +56,14 @@ const App = () => (
               element={
                 <ProtectedRoute>
                   <AIInsights />
+                </ProtectedRoute>
+              } 
+            />
+            <Route 
+              path="/settings" 
+              element={
+                <ProtectedRoute>
+                  <Settings />
                 </ProtectedRoute>
               } 
             />
