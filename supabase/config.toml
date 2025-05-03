@@ -1,16 +1,53 @@
 
+project_id = "nuwkzferusgzzfcnrkgu"
+
+[api]
+enabled = true
+port = 54321
+url = "http://localhost:54321"
+
+[db]
+port = 54322
+
+[realtime]
+enabled = true
+
+[storage]
+enabled = true
+
+[auth]
+enabled = true
+site_url = "http://localhost:5173"
+additional_redirect_urls = ["https://localhost:3000"]
+service_role_key = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im51d2t6ZmVydXNnenpmY25ya2d1Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc0NjA5MzM3MSwiZXhwIjoyMDYxNjY5MzcxfQ.lATkVvZ_E-9DcEi8QRyIXqNMx-DkrxPZum0_FbFw7lE"
+anon_key = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im51d2t6ZmVydXNnenpmY25ya2d1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDYwOTMzNzEsImV4cCI6MjA2MTY2OTM3MX0.VqMglizHJHDW_FVlhThjTRnke7rBn4VaSi_M42RSC5g"
+
 [functions]
-[functions.meta-campaigns]
-verify_jwt = true
-[functions.ai-insights]
-verify_jwt = true
-[functions.init-meta-connection]
-verify_jwt = true
+port = 9999
+serve_port = 8000
+
+# Existing edge functions
 [functions.complete-meta-connection]
 verify_jwt = true
+
+[functions.disconnect-meta-account]
+verify_jwt = true
+
 [functions.fetch-ad-accounts]
 verify_jwt = true
+
+[functions.init-meta-connection]
+verify_jwt = true
+
+[functions.meta-campaigns]
+verify_jwt = true
+
 [functions.update-ad-account]
 verify_jwt = true
-[functions.disconnect-meta-account]
+
+# New edge functions
+[functions.fetch-creative-themes]
+verify_jwt = true
+
+[functions.fetch-meta-creatives]
 verify_jwt = true

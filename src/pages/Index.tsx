@@ -1,3 +1,4 @@
+
 import { useEffect, useState } from "react";
 import { AppLayout } from "@/components/Layout/AppLayout";
 import { DashboardHeader, DateRange } from "@/components/Dashboard/DashboardHeader";
@@ -15,7 +16,6 @@ import {
   ShoppingCart 
 } from "lucide-react";
 import {
-  generateCreativeThemes,
   generateAIInsights,
   generateDailyData,
   DailyPerformance
@@ -46,7 +46,7 @@ interface MetaConnection {
 export default function Index() {
   // State for data and loading
   const [dailyData, setDailyData] = useState<DailyPerformance[]>([]);
-  const [creativeThemes, setCreativeThemes] = useState(() => generateCreativeThemes());
+  const [creativeThemes, setCreativeThemes] = useState([]);
   const [aiInsights, setAIInsights] = useState(() => generateAIInsights());
   const [campaigns, setCampaigns] = useState<MetaCampaign[]>([]);
   const [keyMetrics, setKeyMetrics] = useState({
@@ -141,7 +141,7 @@ export default function Index() {
         setKeyMetrics({
           totalSpend: metaData.insights.totalSpent || 0,
           totalRevenue: metaData.insights.totalResults * 100 || 0, // Assuming $100 value per result
-          roas: metaData.insights.averageROI / 100 || 0, // Convert from percentage to multiplier
+          roas: metaData.insights.averageROI || 0, 
           ctr: metaData.campaigns.reduce((sum, camp) => sum + (camp.ctr || 0), 0) / 
                (metaData.campaigns.length || 1) || 0, // Average CTR
           conversions: metaData.insights.totalResults || 0
@@ -154,6 +154,9 @@ export default function Index() {
           // Fallback to generated data if not available
           setDailyData(generateDailyData());
         }
+        
+        // Fetch creative themes
+        fetchCreativeThemes(adAccountId, timeRange);
         
         // Generate dynamic AI insights based on the data
         generateAIInsightsFromData(metaData);
@@ -171,11 +174,32 @@ export default function Index() {
     }
   };
   
+  const fetchCreativeThemes = async (adAccountId?: string, timeRange: DateRange = "last_30_days") => {
+    try {
+      const { data, error } = await supabase.functions.invoke('fetch-creative-themes', {
+        body: { 
+          adAccountId: adAccountId || undefined,
+          timeRange: timeRange
+        }
+      });
+      
+      if (error) {
+        console.error('Error fetching creative themes:', error);
+        return;
+      }
+      
+      if (data && data.themes) {
+        setCreativeThemes(data.themes);
+      }
+    } catch (error) {
+      console.error('Error in fetchCreativeThemes:', error);
+    }
+  };
+  
   const generateAIInsightsFromData = (metaData: MetaApiResponse) => {
     // Keep the existing AI insights but potentially we could generate these based on real data
     // For now we'll just use the mock data
     setAIInsights(generateAIInsights());
-    setCreativeThemes(generateCreativeThemes());
   };
   
   const handleAdAccountChange = async (adAccountId: string) => {
@@ -311,7 +335,11 @@ export default function Index() {
                 title="Performance Over Time"
                 className="lg:col-span-2"
               />
-              <ThemeExplorer themes={creativeThemes} />
+              <ThemeExplorer 
+                themes={creativeThemes} 
+                adAccountId={currentAdAccountId}
+                dateRange={dateRange}
+              />
             </div>
             
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">

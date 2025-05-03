@@ -84,10 +84,12 @@ export function CampaignsTable({ campaigns, className, isLoading = false }: Camp
   
   // Format currency values
   const formatCurrency = (value: number) => {
-    return `$${value.toLocaleString("en-US", {
+    return new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: 'USD',
       minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
-    })}`;
+      maximumFractionDigits: 2
+    }).format(value);
   };
   
   // Format percentage values
@@ -222,16 +224,16 @@ export function CampaignsTable({ campaigns, className, isLoading = false }: Camp
                 sortedCampaigns.map((campaign) => (
                   <TableRow key={campaign.id}>
                     <TableCell className="font-medium">{campaign.name}</TableCell>
-                    <TableCell>{formatCurrency(campaign.spent)}</TableCell>
-                    <TableCell>{campaign.results}</TableCell>
-                    <TableCell className={campaign.roi >= 100 ? "text-green-600" : "text-red-600"}>
-                      {(campaign.roi / 100).toFixed(2)}x
+                    <TableCell>{formatCurrency(campaign.spent || 0)}</TableCell>
+                    <TableCell>{campaign.results || 0}</TableCell>
+                    <TableCell className={(campaign.roi || 0) >= 1 ? "text-green-600" : "text-red-600"}>
+                      {((campaign.roi || 0)).toFixed(2)}x
                     </TableCell>
                     <TableCell className="hidden md:table-cell">
                       {campaign.ctr ? formatPercentage(campaign.ctr) : "N/A"}
                     </TableCell>
                     <TableCell className="hidden md:table-cell">
-                      {formatCurrency(campaign.cpa)}
+                      {campaign.cpa ? formatCurrency(campaign.cpa) : "N/A"}
                     </TableCell>
                     <TableCell className="text-right">
                       <DropdownMenu>
