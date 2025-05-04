@@ -13,7 +13,8 @@ import {
   TrendingUp, 
   BarChart4, 
   MousePointer, 
-  ShoppingCart 
+  ShoppingCart,
+  Target
 } from "lucide-react";
 import {
   generateAIInsights,
@@ -28,6 +29,7 @@ import { useToast } from "@/hooks/use-toast";
 interface MetaInsights {
   totalSpent: number;
   totalResults: number;
+  totalRevenue: number;
   averageCPA: number;
   averageROI: number;
 }
@@ -54,7 +56,8 @@ export default function Index() {
     totalRevenue: 0,
     roas: 0,
     ctr: 0,
-    conversions: 0
+    conversions: 0,
+    costPerAction: 0
   });
   const [dateRange, setDateRange] = useState<DateRange>("last_30_days");
 
@@ -140,11 +143,12 @@ export default function Index() {
         // Update key metrics from real data
         setKeyMetrics({
           totalSpend: metaData.insights.totalSpent || 0,
-          totalRevenue: metaData.insights.totalResults * 100 || 0, // Assuming $100 value per result
+          totalRevenue: metaData.insights.totalRevenue || 0, 
           roas: metaData.insights.averageROI || 0, 
           ctr: metaData.campaigns.reduce((sum, camp) => sum + (camp.ctr || 0), 0) / 
                (metaData.campaigns.length || 1) || 0, // Average CTR
-          conversions: metaData.insights.totalResults || 0
+          conversions: metaData.insights.totalResults || 0,
+          costPerAction: metaData.insights.averageCPA || 0
         });
         
         // Update daily performance data if available
@@ -299,12 +303,12 @@ export default function Index() {
             />
             
             <StatCard
-              title="CTR"
-              value={keyMetrics.ctr}
-              format="percentage"
+              title="Cost per Action"
+              value={keyMetrics.costPerAction}
+              format="currency"
               trend={-1.8}
               invertTrend={true}
-              icon={<MousePointer className="h-4 w-4" />}
+              icon={<Target className="h-4 w-4" />}
             />
             
             <StatCard

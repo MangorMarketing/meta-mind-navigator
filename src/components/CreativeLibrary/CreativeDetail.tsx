@@ -1,3 +1,4 @@
+
 import {
   Sheet,
   SheetContent,
@@ -10,7 +11,17 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 import { 
   Image, 
   Video, 
@@ -29,15 +40,21 @@ import {
   TrendingUp,
   TrendingDown,
   Gauge,
-  Lightbulb
+  Lightbulb,
+  Tag,
+  Plus,
+  X
 } from "lucide-react";
 
+import { useState } from "react";
+import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { Creative } from "@/pages/CreativeLibrary";
 import { CreativeTheme } from "@/utils/mockData";
 import { PerformanceBenchmarkChart, BenchmarkMetric } from "./PerformanceBenchmarkChart";
 import { BenchmarkComparison } from "./BenchmarkComparison";
 import { AIInsights } from "./AIInsights";
+import { supabase } from "@/integrations/supabase/client";
 
 interface CreativeDetailProps {
   creative: Creative;
@@ -47,6 +64,12 @@ interface CreativeDetailProps {
 }
 
 export function CreativeDetail({ creative, isOpen, onClose, themes }: CreativeDetailProps) {
+  const { toast } = useToast();
+  const [isTagsDialogOpen, setIsTagsDialogOpen] = useState(false);
+  const [tagInput, setTagInput] = useState("");
+  const [isUpdatingTags, setIsUpdatingTags] = useState(false);
+  const [currentTags, setCurrentTags] = useState<string[]>(creative.themes || []);
+
   // Format helpers
   const formatNumber = (num: number, decimals = 0) => {
     return num.toLocaleString(undefined, { 
@@ -77,6 +100,71 @@ export function CreativeDetail({ creative, isOpen, onClose, themes }: CreativeDe
     return theme?.color || "#F1F0FB"; // Default to soft gray
   };
 
+  // Handle tag management
+  const handleAddTag = () => {
+    if (!tagInput.trim()) return;
+    
+    const newTag = tagInput.trim();
+    if (currentTags.includes(newTag)) {
+      toast({
+        title: "Tag already exists",
+        description: `"${newTag}" is already added to this creative`,
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    setCurrentTags([...currentTags, newTag]);
+    setTagInput("");
+  };
+
+  const handleRemoveTag = (tag: string) => {
+    setCurrentTags(currentTags.filter(t => t !== tag));
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      handleAddTag();
+    }
+  };
+
+  const handleSaveTags = async () => {
+    setIsUpdatingTags(true);
+    
+    try {
+      const { data, error } = await supabase.functions.invoke('update-creative-tags', {
+        body: { 
+          creativeId: creative.id,
+          tags: currentTags,
+          adAccountId: creative.adAccountId
+        }
+      });
+      
+      if (error) {
+        toast({
+          title: "Error saving tags",
+          description: error.message,
+          variant: "destructive",
+        });
+      } else {
+        toast({
+          title: "Tags updated",
+          description: "Creative tags have been saved successfully",
+        });
+        setIsTagsDialogOpen(false);
+      }
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to update tags. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsUpdatingTags(false);
+    }
+  };
+
   // Benchmark metrics for performance comparison
   const performanceMetrics: BenchmarkMetric[] = [
     {
@@ -88,7 +176,7 @@ export function CreativeDetail({ creative, isOpen, onClose, themes }: CreativeDe
     },
     {
       name: "CPC",
-      value: creative.spend / creative.clicks,
+      value: creative.clicks > 0 ? creative.spend / creative.clicks : 0,
       benchmark: 1.2, // $1.20 industry average CPC
       unit: "$",
       isHigherBetter: false
@@ -102,14 +190,14 @@ export function CreativeDetail({ creative, isOpen, onClose, themes }: CreativeDe
     },
     {
       name: "CPM",
-      value: (creative.spend / creative.impressions) * 1000,
+      value: creative.impressions > 0 ? (creative.spend / creative.impressions) * 1000 : 0,
       benchmark: 7.0, // $7.00 industry average CPM
       unit: "$",
       isHigherBetter: false
     },
     {
       name: "Conv Rate",
-      value: creative.conversions / creative.clicks,
+      value: creative.clicks > 0 ? creative.conversions / creative.clicks : 0,
       benchmark: 0.03, // 3% industry average conversion rate
       unit: "%",
       isHigherBetter: true
@@ -162,9 +250,15 @@ export function CreativeDetail({ creative, isOpen, onClose, themes }: CreativeDe
           {/* Preview */}
           <div className="rounded-lg bg-muted aspect-video overflow-hidden relative">
             <img 
-              src={creative.url}
+              src={creative.url || creative.thumbnailUrl}
               alt={creative.name}
               className="h-full w-full object-cover"
+              onError={(e) => {
+                // If image fails to load, set fallback image
+                const target = e.target as HTMLImageElement;
+                target.onerror = null;
+                target.src = "https://source.unsplash.com/random/800x600?ad";
+              }}
             />
             <div className="absolute top-3 right-3">
               <Badge 
@@ -198,6 +292,11 @@ export function CreativeDetail({ creative, isOpen, onClose, themes }: CreativeDe
             </Badge>
             
             <div className="flex gap-2">
+              <Button variant="outline" size="sm" onClick={() => setIsTagsDialogOpen(true)}>
+                <Tag className="h-4 w-4 mr-1" />
+                Manage Tags
+              </Button>
+              
               <Button variant="outline" size="sm">
                 <Copy className="h-4 w-4 mr-1" />
                 Duplicate
@@ -221,15 +320,15 @@ export function CreativeDetail({ creative, isOpen, onClose, themes }: CreativeDe
           <div className="flex items-center text-sm text-muted-foreground">
             <Calendar className="h-4 w-4 mr-1" />
             <span>
-              Active from {creative.startDate} to {creative.endDate}
+              Active from {new Date(creative.startDate).toLocaleDateString()} to {new Date(creative.endDate).toLocaleDateString()}
             </span>
           </div>
           
           {/* Creative Themes */}
           <div>
-            <h4 className="text-sm font-medium mb-2">Themes</h4>
+            <h4 className="text-sm font-medium mb-2">Tags</h4>
             <div className="flex flex-wrap gap-2">
-              {creative.themes.map((theme) => (
+              {currentTags.map((theme) => (
                 <div
                   key={theme}
                   className="rounded-md px-2 py-1 text-sm"
@@ -253,7 +352,7 @@ export function CreativeDetail({ creative, isOpen, onClose, themes }: CreativeDe
               <TabsTrigger value="insights" className="relative">
                 Insights
                 <span className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-primary text-[10px] text-primary-foreground">
-                  5
+                  {creative.aiInsightsCount || 0}
                 </span>
               </TabsTrigger>
             </TabsList>
@@ -311,8 +410,8 @@ export function CreativeDetail({ creative, isOpen, onClose, themes }: CreativeDe
                     <div>{formatCurrency(creative.revenue)}</div>
                   </div>
                   <div>
-                    <div className="text-muted-foreground">CPC</div>
-                    <div>{formatCurrency(creative.spend / creative.clicks)}</div>
+                    <div className="text-muted-foreground">CPA</div>
+                    <div>{formatCurrency(creative.cost_per_action || (creative.spend / creative.conversions))}</div>
                   </div>
                 </div>
               </div>
@@ -498,6 +597,67 @@ export function CreativeDetail({ creative, isOpen, onClose, themes }: CreativeDe
           </Button>
         </SheetClose>
       </SheetContent>
+
+      {/* Tags Management Dialog */}
+      <Dialog open={isTagsDialogOpen} onOpenChange={setIsTagsDialogOpen}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle>Manage Tags for Creative</DialogTitle>
+            <DialogDescription>
+              Add and remove tags to categorize this creative. These tags help analyze performance by creative type.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4">
+            <div className="flex items-center space-x-2 mb-4">
+              <Input 
+                placeholder="Enter a tag name..." 
+                value={tagInput}
+                onChange={(e) => setTagInput(e.target.value)}
+                onKeyDown={handleKeyDown}
+              />
+              <Button type="submit" size="sm" onClick={handleAddTag}>
+                <Plus className="h-4 w-4" />
+                Add
+              </Button>
+            </div>
+            
+            <div className="flex flex-wrap gap-2 mt-4">
+              {currentTags.map(tag => (
+                <div 
+                  key={tag} 
+                  className="flex items-center gap-1 bg-muted rounded-full px-3 py-1 text-sm"
+                >
+                  {tag}
+                  <Button 
+                    variant="ghost" 
+                    size="sm" 
+                    className="h-5 w-5 p-0 rounded-full" 
+                    onClick={() => handleRemoveTag(tag)}
+                  >
+                    <X className="h-3 w-3" />
+                  </Button>
+                </div>
+              ))}
+              {currentTags.length === 0 && (
+                <p className="text-sm text-muted-foreground">No tags added yet</p>
+              )}
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsTagsDialogOpen(false)}>Cancel</Button>
+            <Button onClick={handleSaveTags} disabled={isUpdatingTags}>
+              {isUpdatingTags ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Saving...
+                </>
+              ) : (
+                'Save Tags'
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </Sheet>
   );
 }

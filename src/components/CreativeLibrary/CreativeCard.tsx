@@ -4,6 +4,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Lightbulb } from "lucide-react";
 import { Creative } from "@/pages/CreativeLibrary";
 import { cn } from "@/lib/utils";
+import { useState } from "react";
 
 interface CreativeCardProps {
   creative: Creative;
@@ -11,6 +12,8 @@ interface CreativeCardProps {
 }
 
 export function CreativeCard({ creative, onClick }: CreativeCardProps) {
+  const [imageError, setImageError] = useState(false);
+  
   // Format currency values
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('en-US', {
@@ -38,32 +41,25 @@ export function CreativeCard({ creative, onClick }: CreativeCardProps) {
     return "bg-red-500 text-white";
   };
 
-  // Clean up creative name - remove any template variables
-  const cleanName = (name: string) => {
-    return name.replace(/\{\{.*?\}\}/g, '').trim();
-  };
-
   return (
     <Card 
       className="overflow-hidden transition-shadow hover:shadow-md cursor-pointer"
       onClick={onClick}
     >
       <div className="aspect-video w-full overflow-hidden bg-muted relative">
-        {creative.thumbnailUrl ? (
+        {!imageError && (creative.url || creative.thumbnailUrl) ? (
           <img
-            src={creative.thumbnailUrl}
-            alt={cleanName(creative.name)}
+            src={creative.url || creative.thumbnailUrl}
+            alt={creative.name}
             className="h-full w-full object-cover"
             onError={(e) => {
-              // If image fails to load, set fallback image
-              const target = e.target as HTMLImageElement;
-              target.onerror = null;
-              target.src = "https://source.unsplash.com/random/800x600?ad";
+              // If image fails to load, mark it as error and use fallback
+              setImageError(true);
             }}
           />
         ) : (
           <div className="flex items-center justify-center h-full bg-muted text-muted-foreground">
-            No preview available
+            {creative.name.substring(0, 30)}...
           </div>
         )}
         
@@ -96,8 +92,8 @@ export function CreativeCard({ creative, onClick }: CreativeCardProps) {
       </div>
       
       <CardContent className="p-4">
-        <div className="mb-2 line-clamp-1 font-medium">
-          {cleanName(creative.name) || "Untitled Creative"}
+        <div className="mb-2 line-clamp-2 font-medium">
+          {creative.name || "Untitled Creative"}
         </div>
         
         <div className="flex flex-wrap gap-1 mb-3">
