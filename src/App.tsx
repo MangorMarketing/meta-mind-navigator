@@ -1,3 +1,4 @@
+
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -13,7 +14,6 @@ import AIInsights from "./pages/AIInsights";
 import Auth from "./pages/Auth";
 import Settings from "./pages/Settings";
 import MetaCallback from "./pages/MetaCallback";
-import Reports from "./pages/Reports";
 
 const queryClient = new QueryClient();
 
@@ -64,14 +64,6 @@ const App = () => (
               element={
                 <ProtectedRoute>
                   <Settings />
-                </ProtectedRoute>
-              } 
-            />
-            <Route 
-              path="/reports" 
-              element={
-                <ProtectedRoute>
-                  <Reports />
                 </ProtectedRoute>
               } 
             />
