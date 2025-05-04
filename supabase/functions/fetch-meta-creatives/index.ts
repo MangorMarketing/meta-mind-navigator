@@ -1,4 +1,3 @@
-
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
@@ -66,6 +65,26 @@ function detectThemes(text: string): string[] {
   });
   
   return detectedThemes;
+}
+
+// Check if there are manually assigned tags for a creative
+async function getManualTags(supabaseClient: any, creativeId: string): Promise<string[]> {
+  try {
+    const { data, error } = await supabaseClient
+      .from('creative_tags')
+      .select('tags')
+      .eq('creative_id', creativeId)
+      .single();
+      
+    if (error || !data) {
+      return [];
+    }
+    
+    return data.tags || [];
+  } catch (e) {
+    console.log('Error fetching manual tags:', e);
+    return [];
+  }
 }
 
 serve(async (req) => {
@@ -192,7 +211,7 @@ serve(async (req) => {
       },
       'yesterday': {
         since: new Date(today.getTime() - 86400000).toISOString().split('T')[0],
-        until: new Date(today.getTime() - 86400000).toISOString().split('T')[0]
+        until: new Date(today.getTime()).toISOString().split('T')[0]
       },
       'last_7_days': {
         since: new Date(today.getTime() - 7 * 86400000).toISOString().split('T')[0],
@@ -219,12 +238,11 @@ serve(async (req) => {
     }
 
     console.log(`Fetching creatives for ad account ${adAccountId} from ${since} to ${until}`);
-    console.log(`Using Meta API token (first 10 chars): ${metaConnection.access_token.substring(0, 10)}...`);
 
     // Fetch ad creatives with insights
     try {
       const creativeResponse = await fetch(
-        `https://graph.facebook.com/v18.0/${adAccountId}/adcreatives?fields=id,name,body,title,object_story_spec,thumbnail_url,effective_object_story_id&limit=50&access_token=${metaConnection.access_token}`,
+        `https://graph.facebook.com/v18.0/${adAccountId}/adcreatives?fields=id,name,body,title,object_story_spec,thumbnail_url,effective_object_story_id,image_url,asset_feed_spec&limit=50&access_token=${metaConnection.access_token}`,
         { method: 'GET' }
       );
 
@@ -245,7 +263,7 @@ serve(async (req) => {
       
       // Fetch ads to get performance metrics and link to creatives
       const adsResponse = await fetch(
-        `https://graph.facebook.com/v18.0/${adAccountId}/ads?fields=id,name,creative{id},adset{name,start_time,end_time},status,effective_status,insights{impressions,clicks,ctr,cpc,spend,actions,conversion_values}&time_range={"since":"${since}","until":"${until}"}&limit=100&access_token=${metaConnection.access_token}`,
+        `https://graph.facebook.com/v18.0/${adAccountId}/ads?fields=id,name,creative{id},adset{name,start_time,end_time},status,effective_status,insights{impressions,clicks,ctr,cpc,spend,actions,conversion_values,cost_per_action_type}&time_range={"since":"${since}","until":"${until}"}&limit=100&access_token=${metaConnection.access_token}`,
         { method: 'GET' }
       );
       
@@ -286,11 +304,6 @@ serve(async (req) => {
         for (const creative of creativeData.data) {
           const linkedAds = adsByCreativeId.get(creative.id) || [];
           
-          if (linkedAds.length === 0) {
-            console.log(`No linked ads found for creative: ${creative.id}`);
-            continue; // Skip creatives without linked ads
-          }
-          
           // Extract text content for theme detection
           const text = [
             creative.name,
@@ -303,23 +316,28 @@ serve(async (req) => {
           ].filter(Boolean).join(' ');
           
           // Detect themes from the creative content
-          const detectedThemes = detectThemes(text);
-          const themes = detectedThemes.length > 0 ? detectedThemes : ["Other"];
+          const autoDetectedThemes = detectThemes(text);
           
-          // Aggregate performance metrics across all ads using this creative
-          let totalImpressions = 0;
-          let totalClicks = 0;
-          let totalSpend = 0;
-          let totalConversions = 0;
-          let totalRevenue = 0;
+          // Get manually assigned tags if they exist
+          const manualTags = await getManualTags(supabaseClient, creative.id);
+          
+          // Use manual tags if available, otherwise use auto-detected themes
+          const themes = manualTags.length > 0 ? manualTags : 
+                        (autoDetectedThemes.length > 0 ? autoDetectedThemes : ["Other"]);
           
           // Determine creative type and URL
           const isVideo = !!creative.object_story_spec?.video_data;
-          let thumbnailUrl = creative.thumbnail_url || "";
-          let url = "";
           
-          // Get creative URL and thumbnail
-          if (creative.object_story_spec) {
+          // Get the best thumbnail URL available
+          let thumbnailUrl = '';
+          let url = '';
+          
+          // Get creative URL and thumbnail - check multiple possible locations
+          if (creative.thumbnail_url) {
+            thumbnailUrl = creative.thumbnail_url;
+          } else if (creative.image_url) {
+            thumbnailUrl = creative.image_url;
+          } else if (creative.object_story_spec) {
             if (isVideo) {
               url = creative.object_story_spec?.video_data?.video_url || "";
               thumbnailUrl = creative.object_story_spec?.video_data?.thumbnail_url || thumbnailUrl;
@@ -330,11 +348,60 @@ serve(async (req) => {
               url = creative.object_story_spec.photo_data.url || "";
               thumbnailUrl = creative.object_story_spec.photo_data.url || thumbnailUrl;
             }
+          } else if (creative.asset_feed_spec?.images && creative.asset_feed_spec.images.length > 0) {
+            thumbnailUrl = creative.asset_feed_spec.images[0].url || "";
           }
           
-          // If no thumbnail found, use a placeholder
+          // If no thumbnail found, try to get it from the effective_object_story_id
+          if (!thumbnailUrl && creative.effective_object_story_id) {
+            try {
+              const storyResponse = await fetch(
+                `https://graph.facebook.com/v18.0/${creative.effective_object_story_id}?fields=full_picture&access_token=${metaConnection.access_token}`,
+                { method: 'GET' }
+              );
+              
+              const storyData = await storyResponse.json();
+              if (storyData && storyData.full_picture) {
+                thumbnailUrl = storyData.full_picture;
+              }
+            } catch (e) {
+              console.log('Error fetching story picture:', e);
+            }
+          }
+          
+          // If still no thumbnail found, use a placeholder
           if (!thumbnailUrl) {
             thumbnailUrl = "https://source.unsplash.com/random/800x600?ad";
+          }
+          
+          // Skip creatives with no linked ads if not showing all
+          if (linkedAds.length === 0) {
+            console.log(`No linked ads found for creative: ${creative.id}`);
+            
+            // Keep creatives with no linked ads but mark them as inactive
+            processedCreatives.push({
+              id: creative.id,
+              name: creative.name || "Untitled Creative",
+              type: isVideo ? "video" : "image",
+              url: url,
+              thumbnailUrl: thumbnailUrl,
+              performance: 0,
+              impressions: 0,
+              clicks: 0,
+              ctr: 0,
+              conversions: 0,
+              cost_per_action: 0,
+              spend: 0,
+              revenue: 0,
+              roas: 0,
+              startDate: new Date().toISOString(),
+              endDate: new Date().toISOString(),
+              themes: themes,
+              status: "archived",
+              aiInsightsCount: Math.floor(Math.random() * 3)
+            });
+            
+            continue;
           }
           
           // Determine status based on linked ads
@@ -346,6 +413,15 @@ serve(async (req) => {
           } else if (allStatuses.some(s => s === "PAUSED")) {
             status = "paused";
           }
+          
+          // Aggregate performance metrics across all ads using this creative
+          let totalImpressions = 0;
+          let totalClicks = 0;
+          let totalSpend = 0;
+          let totalConversions = 0;
+          let totalRevenue = 0;
+          let totalCostPerAction = 0;
+          let costPerActionCount = 0;
           
           // Collect performance data from all ads using this creative
           linkedAds.forEach((ad: any) => {
@@ -388,6 +464,27 @@ serve(async (req) => {
                   totalRevenue += parseFloat(conversionValue.value || '0');
                 }
               }
+              
+              // Parse cost per action (lead or purchase)
+              if (insight.cost_per_action_type) {
+                const leadCpa = insight.cost_per_action_type.find(
+                  (cpa: any) => cpa.action_type === 'lead' || 
+                               cpa.action_type === 'offsite_conversion.fb_pixel_lead'
+                );
+                
+                const purchaseCpa = insight.cost_per_action_type.find(
+                  (cpa: any) => cpa.action_type === 'purchase' || 
+                               cpa.action_type === 'offsite_conversion.fb_pixel_purchase'
+                );
+                
+                if (leadCpa || purchaseCpa) {
+                  const cpaValue = parseFloat((leadCpa || purchaseCpa).value || '0');
+                  if (cpaValue > 0) {
+                    totalCostPerAction += cpaValue;
+                    costPerActionCount++;
+                  }
+                }
+              }
             }
           });
           
@@ -396,6 +493,7 @@ serve(async (req) => {
           const revenue = totalRevenue > 0 ? totalRevenue : totalConversions * 100; // Assume $100 per conversion if no revenue data
           const roas = totalSpend > 0 ? revenue / totalSpend : 0;
           const performance = roas > 0 ? roas : (ctr > 0.05 ? ctr * 20 : 0.8); // Use ROAS or CTR-based score
+          const avgCostPerAction = costPerActionCount > 0 ? totalCostPerAction / costPerActionCount : 0;
           
           // Determine date range for the creative from ads
           let startDate = new Date();
@@ -424,7 +522,7 @@ serve(async (req) => {
           // Add the processed creative
           processedCreatives.push({
             id: creative.id,
-            name: creative.name,
+            name: creative.name || "Untitled Creative",
             type: isVideo ? "video" : "image",
             url: url,
             thumbnailUrl: thumbnailUrl,
@@ -433,6 +531,7 @@ serve(async (req) => {
             clicks: totalClicks,
             ctr: ctr,
             conversions: totalConversions,
+            cost_per_action: avgCostPerAction,
             spend: totalSpend,
             revenue: revenue,
             roas: roas,
@@ -440,7 +539,8 @@ serve(async (req) => {
             endDate: endDate.toISOString(),
             themes: themes,
             status: status,
-            aiInsightsCount: Math.floor(Math.random() * 5) + 1 // Adding random AI insights count for demo
+            aiInsightsCount: Math.floor(Math.random() * 5) + 1,
+            hasManualTags: manualTags.length > 0
           });
         }
       }

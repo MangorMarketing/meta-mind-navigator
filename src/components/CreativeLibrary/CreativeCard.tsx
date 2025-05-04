@@ -38,17 +38,34 @@ export function CreativeCard({ creative, onClick }: CreativeCardProps) {
     return "bg-red-500 text-white";
   };
 
+  // Clean up creative name - remove any template variables
+  const cleanName = (name: string) => {
+    return name.replace(/\{\{.*?\}\}/g, '').trim();
+  };
+
   return (
     <Card 
       className="overflow-hidden transition-shadow hover:shadow-md cursor-pointer"
       onClick={onClick}
     >
       <div className="aspect-video w-full overflow-hidden bg-muted relative">
-        <img
-          src={creative.thumbnailUrl}
-          alt={creative.name}
-          className="h-full w-full object-cover"
-        />
+        {creative.thumbnailUrl ? (
+          <img
+            src={creative.thumbnailUrl}
+            alt={cleanName(creative.name)}
+            className="h-full w-full object-cover"
+            onError={(e) => {
+              // If image fails to load, set fallback image
+              const target = e.target as HTMLImageElement;
+              target.onerror = null;
+              target.src = "https://source.unsplash.com/random/800x600?ad";
+            }}
+          />
+        ) : (
+          <div className="flex items-center justify-center h-full bg-muted text-muted-foreground">
+            No preview available
+          </div>
+        )}
         
         {/* Status badge */}
         <div className="absolute top-2 left-2">
@@ -80,7 +97,7 @@ export function CreativeCard({ creative, onClick }: CreativeCardProps) {
       
       <CardContent className="p-4">
         <div className="mb-2 line-clamp-1 font-medium">
-          {creative.name}
+          {cleanName(creative.name) || "Untitled Creative"}
         </div>
         
         <div className="flex flex-wrap gap-1 mb-3">

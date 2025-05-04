@@ -45,9 +45,12 @@ verify_jwt = true
 [functions.update-ad-account]
 verify_jwt = true
 
-# New edge functions
 [functions.fetch-creative-themes]
 verify_jwt = true
 
 [functions.fetch-meta-creatives]
+verify_jwt = true
+
+# New edge function for managing creative tags
+[functions.update-creative-tags]
 verify_jwt = true

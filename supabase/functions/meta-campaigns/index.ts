@@ -204,7 +204,7 @@ serve(async (req) => {
     
     // Fetch campaigns for the ad account with time range
     const campaignsResponse = await fetch(
-      `https://graph.facebook.com/v18.0/${adAccountId}/campaigns?fields=name,status,objective,budget_remaining,spend,insights{ctr,impressions,reach,clicks,cpc,cpm,cost_per_conversion,conversions,spend,actions}&time_range={"since":"${since}","until":"${until}"}&access_token=${META_API_TOKEN}`,
+      `https://graph.facebook.com/v18.0/${adAccountId}/campaigns?fields=name,status,objective,budget_remaining,spend,insights{ctr,impressions,reach,clicks,cpc,cpm,cost_per_conversion,conversions,spend,actions,conversion_values,cost_per_action_type}&time_range={"since":"${since}","until":"${until}"}&access_token=${META_API_TOKEN}`,
       { method: 'GET' }
     );
     
@@ -232,6 +232,7 @@ serve(async (req) => {
           insights: {
             totalSpent: 0,
             totalResults: 0,
+            totalRevenue: 0,
             averageCPA: 0,
             averageROI: 0
           },
@@ -243,13 +244,15 @@ serve(async (req) => {
     
     // Get summary insights for the account level directly from the Insights API
     const accountInsightsResponse = await fetch(
-      `https://graph.facebook.com/v18.0/${adAccountId}/insights?fields=spend,actions,impressions,reach,clicks,ctr,cpc,cpm&time_range={"since":"${since}","until":"${until}"}&access_token=${META_API_TOKEN}`,
+      `https://graph.facebook.com/v18.0/${adAccountId}/insights?fields=spend,actions,impressions,reach,clicks,ctr,cpc,cpm,cost_per_action_type,conversion_values&time_range={"since":"${since}","until":"${until}"}&access_token=${META_API_TOKEN}`,
       { method: 'GET' }
     );
     
     const accountInsightsData = await accountInsightsResponse.json();
     let accountLevelSpend = 0;
     let accountLevelResults = 0;
+    let accountLevelRevenue = 0;
+    let accountLevelCPA = 0;
     
     // Parse account level metrics if available
     if (!accountInsightsData.error && accountInsightsData.data && accountInsightsData.data.length > 0) {
@@ -276,6 +279,39 @@ serve(async (req) => {
           }
         }
       }
+      
+      // Parse revenue from conversion_values
+      if (accountInsightsData.data[0].conversion_values) {
+        const purchaseValue = accountInsightsData.data[0].conversion_values.find(
+          (value: any) => value.action_type === 'purchase' || value.action_type === 'offsite_conversion.fb_pixel_purchase'
+        );
+        
+        if (purchaseValue) {
+          accountLevelRevenue = parseFloat(purchaseValue.value || '0');
+        }
+      }
+      
+      // Parse cost per action
+      if (accountInsightsData.data[0].cost_per_action_type) {
+        const purchaseCPA = accountInsightsData.data[0].cost_per_action_type.find(
+          (cpa: any) => cpa.action_type === 'purchase' || cpa.action_type === 'offsite_conversion.fb_pixel_purchase'
+        );
+        
+        if (purchaseCPA) {
+          accountLevelCPA = parseFloat(purchaseCPA.value || '0');
+        }
+        
+        // If no purchase CPA found, look for lead CPA
+        if (accountLevelCPA === 0) {
+          const leadCPA = accountInsightsData.data[0].cost_per_action_type.find(
+            (cpa: any) => cpa.action_type === 'lead' || cpa.action_type === 'offsite_conversion.fb_pixel_lead'
+          );
+          
+          if (leadCPA) {
+            accountLevelCPA = parseFloat(leadCPA.value || '0');
+          }
+        }
+      }
     }
     
     // Transform the campaign data to match our expected format
@@ -283,6 +319,8 @@ serve(async (req) => {
       const insights = campaign.insights?.data?.[0] || {};
       let conversions = 0;
       let spent = 0;
+      let revenue = 0;
+      let costPerAction = 0;
       
       // Parse spend (ensure it's not undefined or null)
       if (campaign.spend) {
@@ -312,6 +350,51 @@ serve(async (req) => {
         }
       }
       
+      // Parse revenue from conversion_values
+      if (insights.conversion_values) {
+        const purchaseValue = insights.conversion_values.find(
+          (value: any) => value.action_type === 'purchase' || value.action_type === 'offsite_conversion.fb_pixel_purchase'
+        );
+        
+        if (purchaseValue) {
+          revenue = parseFloat(purchaseValue.value || '0');
+        }
+      }
+      
+      // If no direct revenue data, estimate from conversions
+      if (revenue === 0 && conversions > 0) {
+        // Check campaign objective to determine if lead or purchase focused
+        if (campaign.objective && 
+            (campaign.objective.includes('LEAD') || 
+             campaign.objective.includes('MESSAGES'))) {
+          // For lead campaigns, assume $50 per lead
+          revenue = conversions * 50;
+        } else {
+          // For other campaigns, assume $100 per conversion
+          revenue = conversions * 100;
+        }
+      }
+      
+      // Parse cost per action
+      if (insights.cost_per_action_type) {
+        const purchaseCPA = insights.cost_per_action_type.find(
+          (cpa: any) => cpa.action_type === 'purchase' || cpa.action_type === 'offsite_conversion.fb_pixel_purchase'
+        );
+        
+        if (purchaseCPA) {
+          costPerAction = parseFloat(purchaseCPA.value || '0');
+        } else {
+          // Try to find lead CPA if no purchase CPA
+          const leadCPA = insights.cost_per_action_type.find(
+            (cpa: any) => cpa.action_type === 'lead' || cpa.action_type === 'offsite_conversion.fb_pixel_lead'
+          );
+          
+          if (leadCPA) {
+            costPerAction = parseFloat(leadCPA.value || '0');
+          }
+        }
+      }
+      
       const results = conversions;
       const ctr = parseFloat(insights.ctr || '0');
       const impressions = parseInt(insights.impressions || '0');
@@ -319,8 +402,8 @@ serve(async (req) => {
       const clicks = parseInt(insights.clicks || '0');
       const cpc = parseFloat(insights.cpc || '0');
       const cpm = parseFloat(insights.cpm || '0');
-      const cpa = results > 0 ? spent / results : 0;
-      const roi = spent > 0 ? (results * 100) / spent : 0; // 100 is the assumed value per conversion
+      const cpa = costPerAction > 0 ? costPerAction : (results > 0 ? spent / results : 0);
+      const roi = spent > 0 ? revenue / spent : 0;
       
       return {
         id: campaign.id,
@@ -337,7 +420,8 @@ serve(async (req) => {
         reach: reach,
         clicks: clicks,
         cpc: cpc,
-        cpm: cpm
+        cpm: cpm,
+        revenue: revenue
       };
     });
     
@@ -348,12 +432,18 @@ serve(async (req) => {
     const totalResults = accountLevelResults > 0 ? accountLevelResults :
       processedCampaigns.reduce((sum, campaign) => sum + campaign.results, 0);
       
-    const averageCPA = totalResults > 0 ? totalSpent / totalResults : 0;
-    const averageROI = totalSpent > 0 ? (totalResults * 100) / totalSpent : 0;
+    // Calculate total revenue - prefer account level if available
+    const totalRevenue = accountLevelRevenue > 0 ? accountLevelRevenue :
+      processedCampaigns.reduce((sum, campaign) => sum + campaign.revenue, 0);
+      
+    const averageCPA = accountLevelCPA > 0 ? accountLevelCPA :
+      (totalResults > 0 ? totalSpent / totalResults : 0);
+      
+    const averageROI = totalSpent > 0 ? totalRevenue / totalSpent : 0;
     
     // Fetch daily data for performance chart
     const dailyInsightsResponse = await fetch(
-      `https://graph.facebook.com/v18.0/${adAccountId}/insights?fields=spend,actions,impressions,clicks&time_increment=1&time_range={"since":"${since}","until":"${until}"}&access_token=${META_API_TOKEN}`,
+      `https://graph.facebook.com/v18.0/${adAccountId}/insights?fields=spend,actions,impressions,clicks,conversion_values,cost_per_action_type&time_increment=1&time_range={"since":"${since}","until":"${until}"}&access_token=${META_API_TOKEN}`,
       { method: 'GET' }
     );
     
@@ -364,6 +454,7 @@ serve(async (req) => {
       dailyPerformance = dailyInsightsData.data.map((day: any) => {
         // Extract purchase or lead actions
         let dayResults = 0;
+        let dayRevenue = 0;
         
         if (day.actions) {
           const purchaseActions = day.actions.find(
@@ -386,15 +477,59 @@ serve(async (req) => {
           }
         }
         
+        // Parse revenue from conversion_values
+        if (day.conversion_values) {
+          const purchaseValue = day.conversion_values.find(
+            (value: any) => value.action_type === 'purchase' || value.action_type === 'offsite_conversion.fb_pixel_purchase'
+          );
+          
+          if (purchaseValue) {
+            dayRevenue = parseFloat(purchaseValue.value || '0');
+          }
+        }
+        
+        // If no direct revenue data, estimate from conversions
+        if (dayRevenue === 0 && dayResults > 0) {
+          // For lead campaigns, assume $50 per lead (simple estimation)
+          // For purchase campaigns, assume $100 per conversion
+          dayRevenue = dayResults * 100;  // Default to $100 per conversion/lead
+        }
+        
         const daySpend = parseFloat(day.spend || '0');
-        const dayRevenue = dayResults * 100; // Assuming $100 value per result
         const dayRoas = daySpend > 0 ? dayRevenue / daySpend : 0;
+        
+        // Get cost per action if available
+        let dayCpa = 0;
+        if (day.cost_per_action_type) {
+          const purchaseCPA = day.cost_per_action_type.find(
+            (cpa: any) => cpa.action_type === 'purchase' || cpa.action_type === 'offsite_conversion.fb_pixel_purchase'
+          );
+          
+          if (purchaseCPA) {
+            dayCpa = parseFloat(purchaseCPA.value || '0');
+          } else {
+            // Try to find lead CPA if no purchase CPA
+            const leadCPA = day.cost_per_action_type.find(
+              (cpa: any) => cpa.action_type === 'lead' || cpa.action_type === 'offsite_conversion.fb_pixel_lead'
+            );
+            
+            if (leadCPA) {
+              dayCpa = parseFloat(leadCPA.value || '0');
+            }
+          }
+        }
+        
+        // If still no CPA but we have spend and conversions, calculate it
+        if (dayCpa === 0 && dayResults > 0 && daySpend > 0) {
+          dayCpa = daySpend / dayResults;
+        }
         
         return {
           date: day.date_start,
           spend: daySpend,
           revenue: dayRevenue,
           roas: dayRoas,
+          cpa: dayCpa,
           impressions: parseInt(day.impressions || '0'),
           clicks: parseInt(day.clicks || '0'),
           conversions: dayResults
@@ -407,6 +542,7 @@ serve(async (req) => {
       insights: {
         totalSpent,
         totalResults,
+        totalRevenue,
         averageCPA,
         averageROI
       },
