@@ -43,7 +43,8 @@ import {
   Lightbulb,
   Tag,
   Plus,
-  X
+  X,
+  Loader // Using the allowed Loader icon instead of Loader2
 } from "lucide-react";
 
 import { useState } from "react";
@@ -133,11 +134,11 @@ export function CreativeDetail({ creative, isOpen, onClose, themes }: CreativeDe
     setIsUpdatingTags(true);
     
     try {
+      // Fix: Pass the correct properties to update-creative-tags
       const { data, error } = await supabase.functions.invoke('update-creative-tags', {
         body: { 
           creativeId: creative.id,
-          tags: currentTags,
-          adAccountId: creative.adAccountId
+          tags: currentTags
         }
       });
       
@@ -411,7 +412,7 @@ export function CreativeDetail({ creative, isOpen, onClose, themes }: CreativeDe
                   </div>
                   <div>
                     <div className="text-muted-foreground">CPA</div>
-                    <div>{formatCurrency(creative.cost_per_action || (creative.spend / creative.conversions))}</div>
+                    <div>{formatCurrency(creative.spend / creative.conversions)}</div>
                   </div>
                 </div>
               </div>
@@ -648,7 +649,7 @@ export function CreativeDetail({ creative, isOpen, onClose, themes }: CreativeDe
             <Button onClick={handleSaveTags} disabled={isUpdatingTags}>
               {isUpdatingTags ? (
                 <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  <Loader className="mr-2 h-4 w-4 animate-spin" />
                   Saving...
                 </>
               ) : (

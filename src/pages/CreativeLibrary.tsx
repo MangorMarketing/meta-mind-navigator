@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from "react";
 import { AppLayout } from "@/components/Layout/AppLayout";
 import { CreativeHeader } from "@/components/CreativeLibrary/CreativeHeader";
@@ -55,6 +54,8 @@ export interface Creative {
   };
   // AI insights data
   aiInsightsCount?: number;
+  adAccountId?: string;
+  cost_per_action?: number;
 }
 
 export default function CreativeLibrary() {

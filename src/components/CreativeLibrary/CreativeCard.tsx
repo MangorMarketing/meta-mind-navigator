@@ -52,7 +52,7 @@ export function CreativeCard({ creative, onClick }: CreativeCardProps) {
             src={creative.url || creative.thumbnailUrl}
             alt={creative.name}
             className="h-full w-full object-cover"
-            onError={(e) => {
+            onError={() => {
               // If image fails to load, mark it as error and use fallback
               setImageError(true);
             }}

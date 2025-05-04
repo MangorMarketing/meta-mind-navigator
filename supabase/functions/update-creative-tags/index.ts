@@ -49,7 +49,7 @@ serve(async (req) => {
       );
     }
     
-    const { creativeId, tags, adAccountId } = await req.json();
+    const { creativeId, tags } = await req.json();
     
     if (!creativeId) {
       return new Response(
@@ -58,33 +58,13 @@ serve(async (req) => {
       );
     }
     
-    // Ensure the user has access to the ad account
-    if (adAccountId) {
-      const { data: metaConnection, error: metaError } = await supabaseClient
-        .from('meta_connections')
-        .select('ad_account_id')
-        .eq('user_id', user.id)
-        .single();
-        
-      if (metaError || !metaConnection || metaConnection.ad_account_id !== adAccountId) {
-        return new Response(
-          JSON.stringify({ 
-            error: 'User does not have access to this ad account',
-            message: 'You do not have permission to update tags for this creative' 
-          }),
-          { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
-      }
-    }
-    
-    // Update or insert the tags
+    // Update or insert the tags without requiring adAccountId
     const { data, error } = await supabaseClient
       .from('creative_tags')
       .upsert(
         {
           creative_id: creativeId,
           user_id: user.id,
-          ad_account_id: adAccountId,
           tags: Array.isArray(tags) ? tags : [],
           updated_at: new Date().toISOString()
         },
