@@ -1,4 +1,3 @@
-
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Link, useLocation } from "react-router-dom";
@@ -10,7 +9,8 @@ import {
   Menu,
   ChevronLeft,
   LightbulbIcon,
-  Users
+  Users,
+  FileText
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -84,6 +84,13 @@ export function Sidebar() {
           label="Creative Library"
           to="/creative-library"
           active={location.pathname === "/creative-library"}
+          collapsed={collapsed}
+        />
+        <SidebarItem
+          icon={FileText}
+          label="Reports"
+          to="/reports"
+          active={location.pathname === "/reports"}
           collapsed={collapsed}
         />
         <SidebarItem
