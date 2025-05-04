@@ -1,4 +1,3 @@
-
 import { useEffect, useState } from "react";
 import { AppLayout } from "@/components/Layout/AppLayout";
 import { DashboardHeader, DateRange } from "@/components/Dashboard/DashboardHeader";
@@ -8,6 +7,8 @@ import { ThemeExplorer } from "@/components/Dashboard/ThemeExplorer";
 import { InsightsFeed } from "@/components/Dashboard/InsightsFeed";
 import { CampaignsTable, MetaCampaign } from "@/components/Dashboard/CampaignsTable";
 import { MetaConnect } from "@/components/Dashboard/MetaConnect";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"; 
+import { AlertCircle } from "lucide-react";
 import { 
   DollarSign, 
   TrendingUp, 
@@ -66,6 +67,8 @@ export default function Index() {
   const [apiError, setApiError] = useState<string | null>(null);
   const [isMetaConnected, setIsMetaConnected] = useState(false);
   const [currentAdAccountId, setCurrentAdAccountId] = useState<string | null>(null);
+  const [retryAttempt, setRetryAttempt] = useState(0);
+  const [retryTimeoutId, setRetryTimeoutId] = useState<number | null>(null);
   const { user } = useAuth();
   const { toast } = useToast();
   
@@ -129,11 +132,24 @@ export default function Index() {
           description: "Failed to fetch campaign data. Please try again.",
           variant: "destructive",
         });
+        
+        // Schedule a retry if this was an API rate limiting issue
+        if (error.message?.includes('rate limit') || error.status === 429) {
+          scheduleRetry(adAccountId, timeRange);
+        }
+        
         setIsLoading(false);
         return;
       }
       
       if (data) {
+        // Clear any retry timeouts since we got data successfully
+        if (retryTimeoutId) {
+          clearTimeout(retryTimeoutId);
+          setRetryTimeoutId(null);
+          setRetryAttempt(0);
+        }
+        
         const metaData = data as MetaApiResponse;
         console.log('Fetched Meta data:', metaData);
         
@@ -250,6 +266,13 @@ export default function Index() {
   };
   
   const handleRefreshData = () => {
+    // Reset retry attempts on manual refresh
+    setRetryAttempt(0);
+    if (retryTimeoutId) {
+      clearTimeout(retryTimeoutId);
+      setRetryTimeoutId(null);
+    }
+    
     if (isMetaConnected) {
       fetchMetaCampaigns(currentAdAccountId || undefined, dateRange);
     } else {
@@ -259,6 +282,27 @@ export default function Index() {
         variant: "destructive",
       });
     }
+  };
+  
+  // Add a function to schedule retries with exponential backoff
+  const scheduleRetry = (adAccountId?: string, timeRange?: DateRange) => {
+    // Clear any existing timeout
+    if (retryTimeoutId) {
+      clearTimeout(retryTimeoutId);
+    }
+    
+    // Calculate backoff time (in seconds): 5s, 15s, 30s, 60s, 120s max
+    const delayInSeconds = Math.min(5 * Math.pow(2, retryAttempt), 120);
+    
+    console.log(`Scheduling retry attempt ${retryAttempt + 1} in ${delayInSeconds} seconds`);
+    
+    const timeoutId = setTimeout(() => {
+      console.log(`Executing retry attempt ${retryAttempt + 1}`);
+      fetchMetaCampaigns(adAccountId, timeRange);
+      setRetryAttempt(prev => prev + 1);
+    }, delayInSeconds * 1000) as unknown as number;
+    
+    setRetryTimeoutId(timeoutId);
   };
   
   return (
@@ -321,14 +365,22 @@ export default function Index() {
         )}
         
         {apiError && (
-          <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-6">
-            <p>{apiError}</p>
-            <p className="text-sm mt-1">
-              {!isMetaConnected 
-                ? "You need to connect your Meta account first." 
-                : "Check your API credentials or try again later."}
-            </p>
-          </div>
+          <Alert variant="destructive" className="bg-red-50 mb-6">
+            <AlertCircle className="h-4 w-4" />
+            <AlertTitle>Error Loading Data</AlertTitle>
+            <AlertDescription>
+              <p>{apiError}</p>
+              <p className="text-sm mt-1">
+                {retryAttempt > 0 ? (
+                  `Automatic retry attempt ${retryAttempt} scheduled. This could be due to Meta API rate limiting.`
+                ) : (
+                  !isMetaConnected 
+                    ? "You need to connect your Meta account first." 
+                    : "This could be due to Meta API rate limiting. Please try again later."
+                )}
+              </p>
+            </AlertDescription>
+          </Alert>
         )}
         
         {isMetaConnected && (
