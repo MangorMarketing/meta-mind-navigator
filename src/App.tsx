@@ -11,7 +11,7 @@ import AIInsights from "@/pages/AIInsights";
 import AIChat from "@/pages/AIChat";
 import CampaignAnalytics from "@/pages/CampaignAnalytics";
 import CreativeLibrary from "@/pages/CreativeLibrary";
-import ProtectedRoute from "@/components/Auth/ProtectedRoute";
+import { ProtectedRoute } from "@/components/Auth/ProtectedRoute";
 import { Toaster } from "@/components/ui/toaster";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
