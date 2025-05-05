@@ -44,7 +44,20 @@ serve(async (req) => {
     }
 
     // Get request body
-    const { dataType, dataPoints, query } = await req.json();
+    const requestBody = await req.json();
+    const { dataType, dataPoints, query } = requestBody;
+
+    console.log(`Received analysis request for ${dataType} with ${dataPoints?.length || 0} data points`);
+    
+    if (!dataPoints || dataPoints.length === 0) {
+      return new Response(
+        JSON.stringify({ 
+          error: 'No data provided',
+          message: `No ${dataType || 'data'} available for analysis` 
+        }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
 
     // Get OpenAI API key from Supabase secrets
     const openAiKey = Deno.env.get('OPENAI_API_KEY');
@@ -70,6 +83,8 @@ serve(async (req) => {
       systemPrompt += `Analyze the provided marketing data and identify key insights, patterns, and recommendations.
       Format your response with clear sections, bullet points where appropriate, and highlight key metrics.`;
     }
+
+    console.log("Calling OpenAI API...");
 
     // Call the OpenAI API
     const response = await fetch('https://api.openai.com/v1/chat/completions', {
@@ -99,6 +114,8 @@ serve(async (req) => {
 
     const data = await response.json();
     const insights = data.choices[0].message.content;
+
+    console.log("Analysis completed successfully");
 
     // Return the insights
     return new Response(

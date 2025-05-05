@@ -33,8 +33,13 @@ export default function AIChat() {
       
       if (campaignsResult.error) {
         console.error("Error fetching campaigns:", campaignsResult.error);
+        setApiError("Failed to load campaign data for analysis");
       } else if (campaignsResult.data && campaignsResult.data.campaigns) {
+        console.log("Fetched campaigns:", campaignsResult.data.campaigns);
         setCampaigns(campaignsResult.data.campaigns);
+      } else {
+        console.log("No campaign data returned");
+        setCampaigns([]);
       }
       
       // Fetch creatives
@@ -45,7 +50,11 @@ export default function AIChat() {
       if (creativesResult.error) {
         console.error("Error fetching creatives:", creativesResult.error);
       } else if (creativesResult.data && creativesResult.data.creatives) {
+        console.log("Fetched creatives:", creativesResult.data.creatives);
         setCreatives(creativesResult.data.creatives);
+      } else {
+        console.log("No creative data returned");
+        setCreatives([]);
       }
       
     } catch (error) {
@@ -110,6 +119,7 @@ export default function AIChat() {
                 onAnalysisComplete={handleAnalysisComplete}
                 campaigns={campaigns}
                 creatives={creatives}
+                isLoading={isLoading}
               />
             </div>
           ) : (
@@ -144,6 +154,29 @@ export default function AIChat() {
             </div>
           )}
         </div>
+        
+        {isLoading && (
+          <div className="flex justify-center items-center mt-8">
+            <Loader2 className="h-8 w-8 animate-spin text-brand" />
+            <span className="ml-2">Loading data for analysis...</span>
+          </div>
+        )}
+        
+        {!isLoading && campaigns.length === 0 && creatives.length === 0 && !apiError && (
+          <Alert variant="destructive" className="mt-8">
+            <AlertCircle className="h-4 w-4" />
+            <AlertTitle>No data available</AlertTitle>
+            <AlertDescription>
+              <p>No campaigns data is available for analysis.</p>
+              <p className="text-sm mt-2">
+                Make sure you have connected your Meta account and have at least one campaign or creative to analyze.
+              </p>
+              <Button className="mt-4" variant="outline" onClick={handleRefresh}>
+                Refresh Data
+              </Button>
+            </AlertDescription>
+          </Alert>
+        )}
       </div>
     </AppLayout>
   );
