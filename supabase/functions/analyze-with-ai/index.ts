@@ -101,6 +101,22 @@ serve(async (req) => {
         cpc: campaign.cpc,
         cpa: campaign.cpa
       }));
+    } else if (dataType === 'creatives' && dataPoints.length > 20) {
+      // If there are too many creatives, simplify the data
+      formattedData = dataPoints.map(creative => ({
+        name: creative.name,
+        type: creative.type,
+        performance: creative.performance,
+        impressions: creative.impressions,
+        clicks: creative.clicks, 
+        ctr: creative.ctr,
+        conversions: creative.conversions,
+        spend: creative.spend,
+        revenue: creative.revenue,
+        roas: creative.roas,
+        themes: creative.themes,
+        status: creative.status
+      }));
     }
 
     console.log("Calling OpenAI API with model gpt-4o-mini...");

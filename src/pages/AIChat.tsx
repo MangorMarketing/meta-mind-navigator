@@ -15,6 +15,7 @@ export default function AIChat() {
   const [insights, setInsights] = useState<string | null>(null);
   const [campaigns, setCampaigns] = useState<any[]>([]);
   const [creatives, setCreatives] = useState<any[]>([]);
+  const [currentAdAccountId, setCurrentAdAccountId] = useState<string | null>(null);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -47,6 +48,7 @@ export default function AIChat() {
       
       const adAccountId = adAccountResponse.data.adAccounts[0].id;
       console.log("Using ad account:", adAccountId);
+      setCurrentAdAccountId(adAccountId);
       
       // Fetch campaigns with the ad account ID
       const campaignsResult = await supabase.functions.invoke("meta-campaigns", {
@@ -66,14 +68,14 @@ export default function AIChat() {
       
       // Fetch creatives with the ad account ID
       const creativesResult = await supabase.functions.invoke("fetch-meta-creatives", {
-        body: { adAccountId }
+        body: { adAccountId, timeRange: 'last_30_days' }
       });
       
       if (creativesResult.error) {
         console.error("Error fetching creatives:", creativesResult.error);
         // Continue execution even if creatives fetch fails
       } else if (creativesResult.data && creativesResult.data.creatives) {
-        console.log("Fetched creatives:", creativesResult.data.creatives);
+        console.log("Fetched creatives for AI analysis:", creativesResult.data.creatives.length);
         setCreatives(creativesResult.data.creatives);
       } else {
         console.log("No creative data returned");
@@ -146,6 +148,7 @@ export default function AIChat() {
                 campaigns={campaigns}
                 creatives={creatives}
                 isLoading={isLoading}
+                adAccountId={currentAdAccountId}
               />
             </div>
           ) : (
