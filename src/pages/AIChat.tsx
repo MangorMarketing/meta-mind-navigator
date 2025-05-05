@@ -26,14 +26,36 @@ export default function AIChat() {
     setApiError(null);
     
     try {
-      // Fetch campaigns
-      const campaignsResult = await supabase.functions.invoke("meta-campaigns", {
+      // Fetch ad account first to use in subsequent requests
+      const adAccountResponse = await supabase.functions.invoke("fetch-ad-accounts", {
         body: {}
+      });
+      
+      if (adAccountResponse.error) {
+        console.error("Error fetching ad accounts:", adAccountResponse.error);
+        setApiError("Failed to load account data for analysis");
+        setIsLoading(false);
+        return;
+      }
+      
+      if (!adAccountResponse.data?.adAccounts || adAccountResponse.data.adAccounts.length === 0) {
+        console.log("No ad accounts found");
+        setApiError("No Meta ad accounts connected");
+        setIsLoading(false);
+        return;
+      }
+      
+      const adAccountId = adAccountResponse.data.adAccounts[0].id;
+      console.log("Using ad account:", adAccountId);
+      
+      // Fetch campaigns with the ad account ID
+      const campaignsResult = await supabase.functions.invoke("meta-campaigns", {
+        body: { adAccountId }
       });
       
       if (campaignsResult.error) {
         console.error("Error fetching campaigns:", campaignsResult.error);
-        setApiError("Failed to load campaign data for analysis");
+        // Continue execution even if campaigns fetch fails
       } else if (campaignsResult.data && campaignsResult.data.campaigns) {
         console.log("Fetched campaigns:", campaignsResult.data.campaigns);
         setCampaigns(campaignsResult.data.campaigns);
@@ -42,13 +64,14 @@ export default function AIChat() {
         setCampaigns([]);
       }
       
-      // Fetch creatives
+      // Fetch creatives with the ad account ID
       const creativesResult = await supabase.functions.invoke("fetch-meta-creatives", {
-        body: {}
+        body: { adAccountId }
       });
       
       if (creativesResult.error) {
         console.error("Error fetching creatives:", creativesResult.error);
+        // Continue execution even if creatives fetch fails
       } else if (creativesResult.data && creativesResult.data.creatives) {
         console.log("Fetched creatives:", creativesResult.data.creatives);
         setCreatives(creativesResult.data.creatives);
@@ -82,6 +105,9 @@ export default function AIChat() {
     fetchData();
   };
 
+  // Check if we have data after loading is complete
+  const hasData = !isLoading && (campaigns.length > 0 || creatives.length > 0);
+
   return (
     <AppLayout>
       <div className="page-transition">
@@ -104,7 +130,7 @@ export default function AIChat() {
           </Button>
         </div>
 
-        {apiError && (
+        {apiError && !hasData && (
           <Alert variant="destructive" className="mb-6">
             <AlertCircle className="h-4 w-4" />
             <AlertTitle>Error</AlertTitle>
@@ -162,12 +188,12 @@ export default function AIChat() {
           </div>
         )}
         
-        {!isLoading && campaigns.length === 0 && creatives.length === 0 && !apiError && (
+        {!isLoading && !hasData && !apiError && (
           <Alert variant="destructive" className="mt-8">
             <AlertCircle className="h-4 w-4" />
             <AlertTitle>No data available</AlertTitle>
             <AlertDescription>
-              <p>No campaigns data is available for analysis.</p>
+              <p>No campaigns or creatives data is available for analysis.</p>
               <p className="text-sm mt-2">
                 Make sure you have connected your Meta account and have at least one campaign or creative to analyze.
               </p>

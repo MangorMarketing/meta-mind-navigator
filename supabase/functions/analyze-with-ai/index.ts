@@ -48,6 +48,7 @@ serve(async (req) => {
     const { dataType, dataPoints, query } = requestBody;
 
     console.log(`Received analysis request for ${dataType} with ${dataPoints?.length || 0} data points`);
+    console.log(`User query: ${query}`);
     
     if (!dataPoints || dataPoints.length === 0) {
       return new Response(
@@ -84,7 +85,25 @@ serve(async (req) => {
       Format your response with clear sections, bullet points where appropriate, and highlight key metrics.`;
     }
 
-    console.log("Calling OpenAI API...");
+    // Prepare simplified data for the AI if needed
+    let formattedData = dataPoints;
+    if (dataType === 'campaigns' && dataPoints.length > 10) {
+      // If there are too many campaigns, simplify the data to focus on the most important fields
+      formattedData = dataPoints.map(campaign => ({
+        name: campaign.name,
+        status: campaign.status,
+        objective: campaign.objective,
+        spent: campaign.spent,
+        results: campaign.results,
+        revenue: campaign.revenue,
+        roi: campaign.roi,
+        ctr: campaign.ctr,
+        cpc: campaign.cpc,
+        cpa: campaign.cpa
+      }));
+    }
+
+    console.log("Calling OpenAI API with model gpt-4o-mini...");
 
     // Call the OpenAI API
     const response = await fetch('https://api.openai.com/v1/chat/completions', {
@@ -97,7 +116,7 @@ serve(async (req) => {
         model: 'gpt-4o-mini',
         messages: [
           { role: 'system', content: systemPrompt },
-          { role: 'user', content: `Here is the data to analyze: ${JSON.stringify(dataPoints)}\n\nUser query: ${query}` }
+          { role: 'user', content: `Here is the data to analyze: ${JSON.stringify(formattedData)}\n\nUser query: ${query}` }
         ],
         temperature: 0.7,
       }),

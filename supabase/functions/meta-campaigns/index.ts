@@ -1,4 +1,3 @@
-
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 
 const corsHeaders = {
@@ -27,13 +26,50 @@ serve(async (req: Request) => {
     }
 
     // Parse request body for adAccountId and timeRange
-    const { adAccountId, timeRange } = await req.json();
+    const requestBody = await req.json();
+    let { adAccountId, timeRange } = requestBody;
+    
+    console.log("Request body:", JSON.stringify(requestBody));
     
     if (!adAccountId) {
-      return new Response(
-        JSON.stringify({ error: 'Ad Account ID is required' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      console.log("No ad account ID provided in request, trying to fetch from database");
+      
+      // Create a Supabase client
+      const supabaseClient = createClient(
+        Deno.env.get('SUPABASE_URL') ?? '',
+        Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
+        { auth: { persistSession: false } }
       );
+
+      // Get the JWT from the auth header
+      const token = authHeader.replace('Bearer ', '');
+
+      // Verify and decode the JWT
+      const { data: { user }, error: userError } = await supabaseClient.auth.getUser(token);
+      
+      if (userError || !user) {
+        return new Response(
+          JSON.stringify({ error: 'Invalid token', details: userError }),
+          { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+      
+      // Get user's Meta connection to find ad account ID
+      const { data: metaConnection } = await supabaseClient
+        .from('meta_connections')
+        .select('ad_account_id')
+        .eq('user_id', user.id)
+        .maybeSingle();
+      
+      if (metaConnection?.ad_account_id) {
+        adAccountId = metaConnection.ad_account_id;
+        console.log(`Using ad account ID from database: ${adAccountId}`);
+      } else {
+        return new Response(
+          JSON.stringify({ error: 'Ad Account ID is required', message: 'No ad account ID found in request or database' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
     }
 
     // Generate date range from timeRange parameter
@@ -74,7 +110,7 @@ serve(async (req: Request) => {
     }
 
     const campaignsData = await campaignsResponse.json();
-    console.log(`Received ${campaignsData.data.length} campaigns from Meta API`);
+    console.log(`Received ${campaignsData.data?.length || 0} campaigns from Meta API`);
     
     // Log a sample campaign to inspect structure
     if (campaignsData.data && campaignsData.data.length > 0) {
@@ -261,3 +297,6 @@ function generateDailyPerformanceData(dates: { startDate: string, endDate: strin
   
   return dailyData;
 }
+
+// Import createClient for Supabase
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
