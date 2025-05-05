@@ -1,87 +1,44 @@
-import { Toaster } from "@/components/ui/toaster";
-import { Toaster as Sonner } from "@/components/ui/sonner";
-import { TooltipProvider } from "@/components/ui/tooltip";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { AuthProvider } from "@/contexts/AuthContext";
-import { ProtectedRoute } from "@/components/Auth/ProtectedRoute";
-import Index from "./pages/Index";
-import NotFound from "./pages/NotFound";
-import CreativeLibrary from "./pages/CreativeLibrary";
-import CampaignAnalytics from "./pages/CampaignAnalytics";
-import AIInsights from "./pages/AIInsights";
-import Auth from "./pages/Auth";
-import Settings from "./pages/Settings";
-import MetaCallback from "./pages/MetaCallback";
-import Reports from "./pages/Reports";
+import Index from "@/pages/Index";
+import Auth from "@/pages/Auth";
+import Settings from "@/pages/Settings";
+import Reports from "@/pages/Reports";
+import MetaCallback from "@/pages/MetaCallback";
+import NotFound from "@/pages/NotFound";
+import AIInsights from "@/pages/AIInsights";
+import AIChat from "@/pages/AIChat";
+import CampaignAnalytics from "@/pages/CampaignAnalytics";
+import CreativeLibrary from "@/pages/CreativeLibrary";
+import ProtectedRoute from "@/components/Auth/ProtectedRoute";
+import { Toaster } from "@/components/ui/toaster";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
 const queryClient = new QueryClient();
 
-const App = () => (
-  <QueryClientProvider client={queryClient}>
-    <AuthProvider>
-      <TooltipProvider>
-        <Toaster />
-        <Sonner />
-        <BrowserRouter>
+function App() {
+  return (
+    <QueryClientProvider client={queryClient}>
+      <BrowserRouter>
+        <AuthProvider>
           <Routes>
+            <Route path="/" element={<ProtectedRoute><Index /></ProtectedRoute>} />
             <Route path="/auth" element={<Auth />} />
-            <Route path="/meta-callback" element={<MetaCallback />} />
-            <Route 
-              path="/" 
-              element={
-                <ProtectedRoute>
-                  <Index />
-                </ProtectedRoute>
-              } 
-            />
-            <Route 
-              path="/creative-library" 
-              element={
-                <ProtectedRoute>
-                  <CreativeLibrary />
-                </ProtectedRoute>
-              } 
-            />
-            <Route 
-              path="/analytics" 
-              element={
-                <ProtectedRoute>
-                  <CampaignAnalytics />
-                </ProtectedRoute>
-              } 
-            />
-            <Route 
-              path="/insights" 
-              element={
-                <ProtectedRoute>
-                  <AIInsights />
-                </ProtectedRoute>
-              } 
-            />
-            <Route 
-              path="/settings" 
-              element={
-                <ProtectedRoute>
-                  <Settings />
-                </ProtectedRoute>
-              } 
-            />
-            <Route 
-              path="/reports" 
-              element={
-                <ProtectedRoute>
-                  <Reports />
-                </ProtectedRoute>
-              } 
-            />
-            {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
+            <Route path="/settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
+            <Route path="/reports" element={<ProtectedRoute><Reports /></ProtectedRoute>} />
+            <Route path="/insights" element={<ProtectedRoute><AIInsights /></ProtectedRoute>} />
+            <Route path="/ai-chat" element={<ProtectedRoute><AIChat /></ProtectedRoute>} />
+            <Route path="/campaign-analytics" element={<ProtectedRoute><CampaignAnalytics /></ProtectedRoute>} />
+            <Route path="/creative-library" element={<ProtectedRoute><CreativeLibrary /></ProtectedRoute>} />
+            <Route path="/auth/meta/callback" element={<MetaCallback />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
-        </BrowserRouter>
-      </TooltipProvider>
-    </AuthProvider>
-  </QueryClientProvider>
-);
+          <Toaster />
+        </AuthProvider>
+      </BrowserRouter>
+    </QueryClientProvider>
+  );
+}
 
 export default App;
