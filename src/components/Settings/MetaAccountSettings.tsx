@@ -14,12 +14,20 @@ interface AdAccount {
   name: string;
 }
 
+declare global {
+  interface Window {
+    FB: any;
+    fbAsyncInit: () => void;
+  }
+}
+
 export function MetaAccountSettings() {
   const [isConnecting, setIsConnecting] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [isConnected, setIsConnected] = useState(false);
   const [currentAdAccountId, setCurrentAdAccountId] = useState<string | null>(null);
   const [adAccounts, setAdAccounts] = useState<AdAccount[]>([]);
+  const [fbLoaded, setFbLoaded] = useState(false);
   const { toast } = useToast();
   const { user } = useAuth();
 
@@ -28,6 +36,28 @@ export function MetaAccountSettings() {
       fetchMetaConnectionStatus();
     }
   }, [user]);
+
+  useEffect(() => {
+    // Load Facebook SDK
+    if (!document.getElementById('facebook-jssdk')) {
+      const script = document.createElement('script');
+      script.id = 'facebook-jssdk';
+      script.src = 'https://connect.facebook.net/en_US/sdk.js';
+      script.async = true;
+      script.defer = true;
+      document.body.appendChild(script);
+    }
+
+    window.fbAsyncInit = function() {
+      window.FB.init({
+        appId: '1261648262012907', // Your new App ID
+        cookie: true,
+        xfbml: true,
+        version: 'v18.0'
+      });
+      setFbLoaded(true);
+    };
+  }, []);
 
   const fetchMetaConnectionStatus = async () => {
     setIsLoading(true);
@@ -85,71 +115,76 @@ export function MetaAccountSettings() {
       return;
     }
 
+    if (!fbLoaded || !window.FB) {
+      toast({
+        title: "Error",
+        description: "Facebook SDK not loaded. Please refresh the page and try again.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     setIsConnecting(true);
 
     try {
-      // Initiate Meta connection process
-      const { data, error } = await supabase.functions.invoke('init-meta-connection');
-      
-      if (error || !data?.authUrl) {
-        throw new Error(error?.message || "Failed to initialize Meta connection");
-      }
-
-      // Open Facebook login window in a popup
-      const authWindow = window.open(
-        data.authUrl,
-        "Meta Authentication",
-        "width=600,height=700"
-      );
-      
-      // Check for popup blockers
-      if (!authWindow || authWindow.closed) {
-        toast({
-          title: "Popup Blocked",
-          description: "Please allow popups for this site to connect your Meta account",
-          variant: "destructive",
-        });
-        setIsConnecting(false);
-        return;
-      }
-
-      // Set up message listener for the callback
-      const messageHandler = async (event: MessageEvent) => {
-        // Verify message origin for security
-        if (event.data?.type === "META_AUTH_CALLBACK") {
-          // Clean up the listener
-          window.removeEventListener("message", messageHandler);
-          
-          // Close the popup
-          if (authWindow && !authWindow.closed) {
-            authWindow.close();
-          }
-          
-          if (event.data?.error) {
-            toast({
-              title: "Connection Failed",
-              description: event.data.error,
-              variant: "destructive",
-            });
-          } else if (event.data?.success) {
-            toast({
-              title: "Connected Successfully",
-              description: "Your Meta account has been connected",
-            });
-            await fetchMetaConnectionStatus();
-          }
-          
+      // Use Facebook Login API directly
+      window.FB.login((response: any) => {
+        if (response.authResponse) {
+          console.log('Facebook login successful:', response.authResponse);
+          handleFacebookAuthResponse(response.authResponse);
+        } else {
+          console.log('User cancelled login or did not fully authorize.');
+          toast({
+            title: "Connection Cancelled",
+            description: "Meta account connection was cancelled",
+            variant: "destructive",
+          });
           setIsConnecting(false);
         }
-      };
-      
-      window.addEventListener("message", messageHandler);
+      }, {
+        scope: 'ads_management,ads_read,business_management',
+        return_scopes: true
+      });
       
     } catch (error) {
       console.error("Meta connection error:", error);
       toast({
         title: "Connection Error",
         description: error instanceof Error ? error.message : "Failed to connect Meta account",
+        variant: "destructive",
+      });
+      setIsConnecting(false);
+    }
+  };
+
+  const handleFacebookAuthResponse = async (authResponse: any) => {
+    try {
+      // Send the access token to our backend to complete the connection
+      const { data, error } = await supabase.functions.invoke('complete-meta-connection-direct', {
+        body: { 
+          accessToken: authResponse.accessToken,
+          userID: authResponse.userID,
+          expiresIn: authResponse.expiresIn
+        }
+      });
+
+      if (error || !data?.success) {
+        throw new Error(error?.message || data?.error || "Failed to complete Meta connection");
+      }
+
+      toast({
+        title: "Connected Successfully",
+        description: "Your Meta account has been connected",
+      });
+      
+      await fetchMetaConnectionStatus();
+      setIsConnecting(false);
+      
+    } catch (error) {
+      console.error("Error completing Meta connection:", error);
+      toast({
+        title: "Connection Error",
+        description: error instanceof Error ? error.message : "Failed to complete Meta connection",
         variant: "destructive",
       });
       setIsConnecting(false);
@@ -230,7 +265,7 @@ export function MetaAccountSettings() {
         <Button
           className="bg-blue-600 hover:bg-blue-700 w-full sm:w-auto"
           onClick={handleConnectMeta}
-          disabled={isConnecting}
+          disabled={isConnecting || !fbLoaded}
         >
           {isConnecting ? (
             <>
@@ -244,6 +279,10 @@ export function MetaAccountSettings() {
             </>
           )}
         </Button>
+        
+        {!fbLoaded && (
+          <p className="text-xs text-muted-foreground">Loading Facebook SDK...</p>
+        )}
       </div>
     );
   }
