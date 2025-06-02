@@ -66,24 +66,16 @@ serve(async (req) => {
         created_at: new Date()
       });
 
-    // Build the Meta OAuth URL with the correct redirect URI
-    // Use the current origin or fallback to the main domain
-    const origin = req.headers.get('origin') || 'https://6f692784-112f-4f32-8ef4-d994ce7daea2.lovableproject.com';
-    const redirectUri = `${origin}/meta-callback`;
-    
-    console.log('Using redirect URI:', redirectUri);
-    
+    // Build the Meta OAuth URL
     // Request permissions for ads_management, ads_read, business_management
+    const redirectUri = `${req.headers.get('origin')}/meta-callback`;
     const scopes = ['ads_management', 'ads_read', 'business_management'].join(',');
     
     const authUrl = `https://www.facebook.com/v18.0/dialog/oauth?` +
       `client_id=${META_APP_ID}` +
       `&redirect_uri=${encodeURIComponent(redirectUri)}` +
       `&state=${state}` + 
-      `&scope=${encodeURIComponent(scopes)}` +
-      `&response_type=code`;
-
-    console.log('Generated auth URL:', authUrl);
+      `&scope=${encodeURIComponent(scopes)}`;
 
     return new Response(
       JSON.stringify({ authUrl }),

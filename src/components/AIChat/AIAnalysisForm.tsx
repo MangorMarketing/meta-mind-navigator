@@ -1,5 +1,5 @@
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { 
   Card,
   CardContent,
@@ -28,7 +28,7 @@ import {
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
-import { Brain, Loader2, AlertCircle, RefreshCw } from "lucide-react";
+import { Brain, Loader2, AlertCircle } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
@@ -45,19 +45,15 @@ interface AIAnalysisFormProps {
   campaigns?: any[];
   creatives?: any[];
   isLoading?: boolean;
-  adAccountId?: string | null;
 }
 
 export function AIAnalysisForm({ 
   onAnalysisComplete, 
   campaigns = [], 
   creatives = [], 
-  isLoading = false,
-  adAccountId = null
+  isLoading = false 
 }: AIAnalysisFormProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isRefreshingCreatives, setIsRefreshingCreatives] = useState(false);
-  const [localCreatives, setLocalCreatives] = useState<any[]>(creatives);
   const { toast } = useToast();
 
   const form = useForm<FormValues>({
@@ -67,10 +63,6 @@ export function AIAnalysisForm({
       query: "",
     },
   });
-  
-  useEffect(() => {
-    setLocalCreatives(creatives);
-  }, [creatives]);
 
   const onSubmit = async (values: FormValues) => {
     setIsSubmitting(true);
@@ -79,7 +71,7 @@ export function AIAnalysisForm({
       const dataPoints = values.dataType === "campaigns" 
         ? campaigns 
         : values.dataType === "creatives" 
-          ? localCreatives 
+          ? creatives 
           : [];
       
       if (!dataPoints || dataPoints.length === 0) {
@@ -133,70 +125,18 @@ export function AIAnalysisForm({
       setIsSubmitting(false);
     }
   };
-  
-  const refreshCreatives = async () => {
-    if (!adAccountId) {
-      toast({
-        title: "No Ad Account",
-        description: "No ad account ID available to fetch creatives.",
-        variant: "destructive"
-      });
-      return;
-    }
-    
-    setIsRefreshingCreatives(true);
-    try {
-      const { data, error } = await supabase.functions.invoke("fetch-meta-creatives", {
-        body: { 
-          adAccountId, 
-          timeRange: 'last_30_days'
-        }
-      });
-      
-      if (error) {
-        console.error("Error refreshing creatives:", error);
-        toast({
-          title: "Refresh Failed",
-          description: "Failed to refresh creative data.",
-          variant: "destructive"
-        });
-        return;
-      }
-      
-      if (data && data.creatives) {
-        console.log(`Refreshed creatives: ${data.creatives.length} found`);
-        setLocalCreatives(data.creatives);
-        toast({
-          title: "Creatives Refreshed",
-          description: `${data.creatives.length} creatives loaded for analysis.`
-        });
-      } else {
-        toast({
-          title: "No Creatives Found",
-          description: "No creative data was returned from Meta."
-        });
-      }
-    } catch (error) {
-      console.error("Error in refreshCreatives:", error);
-    } finally {
-      setIsRefreshingCreatives(false);
-    }
-  };
 
   const hasNoCampaigns = campaigns.length === 0;
-  const hasNoCreatives = localCreatives.length === 0;
+  const hasNoCreatives = creatives.length === 0;
   const hasNoData = hasNoCampaigns && hasNoCreatives;
   
   const getDataCountText = (dataType: string) => {
     if (dataType === "campaigns") {
       return hasNoCampaigns ? "No campaigns available" : `${campaigns.length} campaigns available`;
     } else {
-      return hasNoCreatives ? "No creatives available" : `${localCreatives.length} creatives available`;
+      return hasNoCreatives ? "No creatives available" : `${creatives.length} creatives available`;
     }
   };
-  
-  const currentDataType = form.watch("dataType");
-  const showCreativesRefreshButton = currentDataType === "creatives" && adAccountId;
 
   return (
     <Card>
@@ -226,64 +166,44 @@ export function AIAnalysisForm({
         ) : (
           <Form {...form}>
             <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-              <div className="flex items-center justify-between">
-                <FormField
-                  control={form.control}
-                  name="dataType"
-                  render={({ field }) => (
-                    <FormItem className="flex-1">
-                      <FormLabel>Data to Analyze</FormLabel>
-                      <Select 
-                        onValueChange={(value) => {
-                          field.onChange(value);
-                          // Show toast with data count
-                          toast({
-                            title: getDataCountText(value),
-                            description: value === "campaigns" 
-                              ? (hasNoCampaigns ? "Connect your Meta account to load campaign data." : "Ready for analysis.") 
-                              : (hasNoCreatives ? "Connect your Meta account to load creative data." : "Ready for analysis."),
-                          });
-                        }} 
-                        defaultValue={field.value}
-                        disabled={isSubmitting}
-                      >
-                        <FormControl>
-                          <SelectTrigger>
-                            <SelectValue placeholder="Select data type" />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          <SelectItem value="campaigns" disabled={hasNoCampaigns}>
-                            Campaign Performance {hasNoCampaigns ? "(No data)" : `(${campaigns.length})`}
-                          </SelectItem>
-                          <SelectItem value="creatives" disabled={hasNoCreatives && !adAccountId}>
-                            Ad Creatives {hasNoCreatives ? "(No data)" : `(${localCreatives.length})`}
-                          </SelectItem>
-                        </SelectContent>
-                      </Select>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                
-                {showCreativesRefreshButton && (
-                  <Button 
-                    type="button" 
-                    variant="outline" 
-                    size="sm"
-                    className="mt-8 ml-2" 
-                    onClick={refreshCreatives}
-                    disabled={isRefreshingCreatives}
-                  >
-                    {isRefreshingCreatives ? (
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                    ) : (
-                      <RefreshCw className="h-4 w-4" />
-                    )}
-                    <span className="ml-2">Refresh</span>
-                  </Button>
+              <FormField
+                control={form.control}
+                name="dataType"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Data to Analyze</FormLabel>
+                    <Select 
+                      onValueChange={(value) => {
+                        field.onChange(value);
+                        // Show toast with data count
+                        toast({
+                          title: getDataCountText(value),
+                          description: value === "campaigns" 
+                            ? (hasNoCampaigns ? "Connect your Meta account to load campaign data." : "Ready for analysis.") 
+                            : (hasNoCreatives ? "Connect your Meta account to load creative data." : "Ready for analysis."),
+                        });
+                      }} 
+                      defaultValue={field.value}
+                      disabled={isSubmitting}
+                    >
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select data type" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value="campaigns" disabled={hasNoCampaigns}>
+                          Campaign Performance {hasNoCampaigns ? "(No data)" : `(${campaigns.length})`}
+                        </SelectItem>
+                        <SelectItem value="creatives" disabled={hasNoCreatives}>
+                          Ad Creatives {hasNoCreatives ? "(No data)" : `(${creatives.length})`}
+                        </SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
                 )}
-              </div>
+              />
               
               <FormField
                 control={form.control}
