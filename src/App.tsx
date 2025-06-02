@@ -31,7 +31,7 @@ function App() {
             <Route path="/ai-chat" element={<ProtectedRoute><AIChat /></ProtectedRoute>} />
             <Route path="/campaign-analytics" element={<ProtectedRoute><CampaignAnalytics /></ProtectedRoute>} />
             <Route path="/creative-library" element={<ProtectedRoute><CreativeLibrary /></ProtectedRoute>} />
-            <Route path="/auth/meta/callback" element={<MetaCallback />} />
+            <Route path="/meta-callback" element={<MetaCallback />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
           <Toaster />

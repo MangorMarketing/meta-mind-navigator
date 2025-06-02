@@ -14,24 +14,41 @@ export default function MetaCallback() {
       const error = params.get("error");
       const errorDescription = params.get("error_description");
 
+      console.log("Meta callback received:", { code: !!code, state: !!state, error, errorDescription });
+
       if (error) {
+        console.error("Meta OAuth error:", error, errorDescription);
         // Send error message back to opener window
-        window.opener?.postMessage({
-          type: "META_AUTH_CALLBACK",
-          error: errorDescription || "Failed to authenticate with Meta",
-        }, window.origin);
+        if (window.opener) {
+          window.opener.postMessage({
+            type: "META_AUTH_CALLBACK",
+            error: errorDescription || error || "Failed to authenticate with Meta",
+          }, window.origin);
+          window.close();
+        } else {
+          // If no opener, redirect to settings with error
+          window.location.href = "/settings?error=" + encodeURIComponent(errorDescription || error);
+        }
         return;
       }
 
       if (!code || !state) {
-        window.opener?.postMessage({
-          type: "META_AUTH_CALLBACK",
-          error: "Invalid callback parameters",
-        }, window.origin);
+        console.error("Missing callback parameters:", { code: !!code, state: !!state });
+        const errorMsg = "Invalid callback parameters";
+        if (window.opener) {
+          window.opener.postMessage({
+            type: "META_AUTH_CALLBACK",
+            error: errorMsg,
+          }, window.origin);
+          window.close();
+        } else {
+          window.location.href = "/settings?error=" + encodeURIComponent(errorMsg);
+        }
         return;
       }
 
       try {
+        console.log("Attempting to complete Meta connection...");
         // Exchange the code for an access token
         const { data, error } = await supabase.functions.invoke('complete-meta-connection', { 
           body: { code, state, redirectUri: window.location.origin + "/meta-callback" } 
@@ -41,21 +58,36 @@ export default function MetaCallback() {
           throw new Error(error?.message || data?.error || "Failed to complete Meta connection");
         }
 
+        console.log("Meta connection completed successfully");
+        
         // Notify the opener window about the successful connection
-        window.opener?.postMessage({
-          type: "META_AUTH_CALLBACK",
-          success: true
-        }, window.origin);
+        if (window.opener) {
+          window.opener.postMessage({
+            type: "META_AUTH_CALLBACK",
+            success: true
+          }, window.origin);
+          window.close();
+        } else {
+          // If no opener, redirect to settings with success
+          window.location.href = "/settings?success=meta_connected";
+        }
       } catch (error) {
         console.error("Error completing Meta connection:", error);
-        window.opener?.postMessage({
-          type: "META_AUTH_CALLBACK",
-          error: error instanceof Error ? error.message : "Failed to complete Meta connection",
-        }, window.origin);
+        const errorMsg = error instanceof Error ? error.message : "Failed to complete Meta connection";
+        
+        if (window.opener) {
+          window.opener.postMessage({
+            type: "META_AUTH_CALLBACK",
+            error: errorMsg,
+          }, window.origin);
+          window.close();
+        } else {
+          window.location.href = "/settings?error=" + encodeURIComponent(errorMsg);
+        }
       }
     };
 
-    if (window.opener) {
+    if (window.opener || location.search.includes('code=')) {
       handleCallback();
     }
   }, [location.search]);
